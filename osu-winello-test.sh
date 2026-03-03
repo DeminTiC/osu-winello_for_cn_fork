@@ -40,7 +40,7 @@ AKATSUKILINK="https://air_conditioning.akatsuki.gg/loader"
 MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v${MAPPINGTOOLSVERSION}/mapping_tools_installer_x64.exe"
 
 # 仓库地址（我就不客气的换成我的fork了 ;) )
-WINELLOGIT="https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
+WINELLOGIT="https://gitee.com/atri-topic/osu-winello_for_cn_fork.git"
 
 # 根据用户选择返回镜像URL
 # 获取镜像加速后的 URL
