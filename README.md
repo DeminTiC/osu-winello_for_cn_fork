@@ -1,7 +1,7 @@
 # osu-winello_for_cn——fork
 此脚本由原版osu-winello修改而来，可实现加速下载，并且实现主要内容汉化。
 
-针对本项目，您可以直接：
+针对本项目，如果您想直接运行稳定版脚本，您可以直接：
 ```
 git clone https://github.com/DeminTiC/osu-winello_for_cn_fork.git
 cd osu-winello_for_cn_fork
@@ -15,6 +15,22 @@ cd osu-winello_for_cn_fork
 chmod +x ./osu-winello.sh
 ./osu-winello.sh
 ```
+除此之外还有支持自定义前缀与动态镜像列表的测试版脚本
+即运行
+```
+git clone https://github.com/DeminTiC/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello-test.sh
+./osu-winello-test.sh
+```
+或者
+```
+git clone https://gitee.com/atri-topic/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello-test.sh
+./osu-winello-test.sh
+```
+
 本人严格遵循GPL协议
 以下内容翻译自osu-wine原项目
 
