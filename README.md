@@ -16,6 +16,7 @@ chmod +x ./osu-winello.sh
 ./osu-winello.sh
 ```
 除此之外还有支持自定义前缀与动态镜像列表的测试版脚本
+外加DownloadFile和wget函数优化
 即运行
 ```
 git clone https://github.com/DeminTiC/osu-winello_for_cn_fork.git
