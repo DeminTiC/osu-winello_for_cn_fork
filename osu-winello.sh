@@ -536,7 +536,7 @@ reconfigurePrefix() {
 
     [ -n "${freshprefix}" ] && {
         Info "检查您的网络连接中.." # The bundled prefix install already checks for internet, so no point checking again
-        ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && { Error "互联网似乎因您而不同，请再次尝试运行该脚本吧！" && return 1; }
+        ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && { Error "互联网似乎因您而不同，请再次尝试运行该脚本吧！" && return 1; }
 
         [ -d "${WINEPREFIX:?}" ] && rm -rf "${WINEPREFIX}"
 
