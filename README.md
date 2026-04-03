@@ -1,3 +1,5 @@
+同步问题，暂时不要使用该项目
+
 # osu-winello
 osu! stable installer for Linux with patched wine-osu and other features.
 
