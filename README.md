@@ -1,7 +1,40 @@
 # osu-winello_for_cn_fork
+该项目由osu-winello项目衍生而来，为中国大陆地区设计，实现可选代理加速与全部内容汉化（包括起动器与注释）
 
+对于本项目，您可以直接
+```
+git clone https://github.com/DeminTiC/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello.sh
+./osu-winello.sh
+```
+或者（注意，码云镜像站因为登陆问题，作者同步更新可能会落后，请知悉）
+```
+git clone https://gitee.com/atri-topic/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello.sh
+./osu-winello.sh
+```
 
+除了正常运行脚本，还有支持自定义镜像前缀、动态镜像列表，以及wget、DownloadFile函数调优的测试版脚本
+即在终端运行
+```
+git clone https://github.com/DeminTiC/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello-test.sh
+./osu-winello.sh
+```
+或者
+```
+git clone https://gitee.com/atri-topic/osu-winello_for_cn_fork.git
+cd osu-winello_for_cn_fork
+chmod +x ./osu-winello-test.sh
+./osu-winello.sh
+```
+
+本人严格遵守GPL协议，配合原作者所有关于本项目的行为
 以下内容翻译自osu-winello原项目
+
 # osu-winello
 适用于 Linux 的 osu! stable 安装程序，包含打过补丁的 wine-osu 及其他功能。
 
