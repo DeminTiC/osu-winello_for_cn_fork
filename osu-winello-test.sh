@@ -42,14 +42,39 @@ MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v$
 WINELLOGIT="https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 
 # 根据用户选择返回镜像URL
+# 获取镜像加速后的 URL
+# 支持的环境变量：
+#   USE_CDN: 设为 1 时启用镜像加速（默认 0）
+#   GITHUB_MIRROR: 指定镜像源，可以是预定义名称或自定义完整 URL 前缀
+#                  若未设置且 USE_CDN=1，则使用默认镜像 'ghproxy'
 get_mirror_url() {
     local url="$1"
-    if [ "${USE_CDN:-0}" = "1" ] && [[ "$url" == *"github.com"* ]]; then
-        # 使用 ghproxy.com 作为镜像前缀
-        echo "https://cdn.gh-proxy.org/$url"
-    else
+    # 如果未启用 CDN 或 URL 不是 GitHub 相关，直接返回原地址
+    if [ "${USE_CDN:-0}" != "1" ] || [[ "$url" != *"github.com"* && "$url" != *"raw.githubusercontent.com"* ]]; then
         echo "$url"
+        return
     fi
+
+    local selected="${GITHUB_MIRROR:-cdnghproxy}"
+    local mirror_prefix=""
+
+    # 根据镜像名称查找对应前缀
+    local found=0
+    for i in "${!mirror_names[@]}"; do
+        if [ "${mirror_names[$i]}" = "$selected" ]; then
+            mirror_prefix="${mirror_urls[$i]}"
+            found=1
+            break
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        mirror_prefix="$selected"   # 视为自定义前缀
+    fi
+
+    local path="${url#https://}"
+    path="${path#http://}"
+    echo "${mirror_prefix}${path}"
 }
 
 # osu-winello.sh 所在的目录
@@ -157,14 +182,17 @@ okay="eval Info 完成！ && return 0"
 
 wgetcommand="wget -q --show-progress"
 _wget() {
-    local url="$1"
-    local output="$2"
-    $wgetcommand "$url" -O "$output" && return 0
-    { [ $? = 2 ] && wgetcommand="wget"; } || wgetcommand="wget --no-check-certificate"
-    $wgetcommand "$url" -O "$output" && return 0
-    wgetcommand='' # 损坏，从今以后使用 curl
+    local url="$1" output="$2"
+    local base_cmd="wget -q --show-progress"
+
+    $base_cmd "$url" -O "$output" && return 0
+    local ret=$?
+    Info "wget 第一次失败（退出码 $ret），尝试忽略证书验证..."
+    $base_cmd --no-check-certificate "$url" -O "$output" && return 0
+
     return 1
 }
+
 
 DownloadFile() {
     local original_url="$1"
@@ -172,13 +200,21 @@ DownloadFile() {
     local url
     url=$(get_mirror_url "$original_url")
     Info "下载 $original_url 到 $output (实际地址: $url)..."
-    if [ -n "$wgetcommand" ] && command -v wget >/dev/null 2>&1; then
-        _wget "$url" "$output" && return 0
+
+    if command -v wget >/dev/null 2>&1; then
+        if _wget "$url" "$output"; then
+            return 0
+        fi
+        Info "wget 下载失败，尝试 curl..."
     fi
+
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$url" -o "$output" && return 0
+        if curl -sSL "$url" -o "$output"; then
+            return 0
+        fi
     fi
-    Error "下载 $original_url 失败，请检查网络连接。"
+
+    Error "下载失败: $original_url (镜像: $url)，请检查网络连接。"
     return 1
 }
 
@@ -230,16 +266,49 @@ InitialSetup() {
     Info "欢迎使用本脚本！按照指引安装 osu! 8)"
 
     # 询问下载镜像选择
+    mirror_names=("cdnghproxy" "xxooo" "dpik")
+    mirror_urls=("https://cdn.gh-proxy.org/" "https://gh.xxooo.cf/" "https://github.dpik.top/")
+    total_mirrors=${#mirror_names[@]}
+
     Info "选择下载源："
-    Info "1) GitHub 直连 (默认，部分地区可能较慢)"
-    Info "2) CDN 镜像 (使用 ghproxy.com 加速 GitHub 资源)"
-    read -r -p "$(Info "请输入选择 [1/2]: ")" mirror_choice
-    if [ "$mirror_choice" = "2" ]; then
-        export USE_CDN=1
-        Info "已启用 CDN 镜像 (GitHub 资源将通过 ghproxy.com 下载)。"
-    else
-        export USE_CDN=0
-    fi
+    echo "1) GitHub 直连 (默认)"
+    for i in "${!mirror_names[@]}"; do
+        index=$((i + 2))  # 选项编号从2开始
+        echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
+    done
+    custom_option=$((total_mirrors + 2))
+    echo "$custom_option) 自定义镜像前缀"
+    read -r -p "$(Info "请输入选择 [1-$custom_option]: ")" mirror_choice
+
+    case "$mirror_choice" in
+        1)
+            export USE_CDN=0
+            Info "使用直连下载"
+            ;;
+        "$custom_option")
+            export USE_CDN=1
+            read -r -p "$(Info "请输入自定义镜像前缀 (例如 https://cdn.gh-proxy.org/): ")" custom_mirror
+            if [[ -n "$custom_mirror" ]]; then
+                export GITHUB_MIRROR="$custom_mirror"
+                Info "已启用自定义镜像: $custom_mirror"
+            else
+                Info "输入为空，取消启用镜像"
+                export USE_CDN=0
+            fi
+            ;;
+        *)
+            # 检查输入是否为有效数字且在镜像范围内
+            if [[ "$mirror_choice" =~ ^[0-9]+$ ]] && [ "$mirror_choice" -ge 2 ] && [ "$mirror_choice" -lt "$custom_option" ]; then
+                idx=$((mirror_choice - 2))
+                export USE_CDN=1
+                export GITHUB_MIRROR="${mirror_names[$idx]}"
+                Info "已启用 CDN 镜像: ${mirror_names[$idx]} (${mirror_urls[$idx]})"
+            else
+                Info "无效选择，使用直连"
+                export USE_CDN=0
+            fi
+            ;;
+    esac
 
     # 检查 $BINDIR 是否在 PATH 中：
     mkdir -p "$BINDIR"
