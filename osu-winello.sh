@@ -45,8 +45,8 @@ WINELLOGIT="https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 get_mirror_url() {
     local url="$1"
     if [ "${USE_CDN:-0}" = "1" ] && [[ "$url" == *"github.com"* ]]; then
-        # 使用 ghproxy.com 作为镜像前缀
-        echo "https://cdn.gh-proxy.org/$url"
+        # 换用 dpik 镜像，cdnghproxy速度过慢
+        echo "https://github.dpik.top/$url"
     else
         echo "$url"
     fi
@@ -232,11 +232,11 @@ InitialSetup() {
     # 询问下载镜像选择
     Info "选择下载源："
     Info "1) GitHub 直连 (默认，部分地区可能较慢)"
-    Info "2) CDN 镜像 (使用 ghproxy.com 加速 GitHub 资源)"
+    Info "2) CDN 镜像 (使用 dpik 站加速 GitHub 资源)"
     read -r -p "$(Info "请输入选择 [1/2]: ")" mirror_choice
     if [ "$mirror_choice" = "2" ]; then
         export USE_CDN=1
-        Info "已启用 CDN 镜像 (GitHub 资源将通过 ghproxy.com 下载)。"
+        Info "已启用 CDN 镜像 (GitHub 资源将通过 https://github.dpik.top/* 下载)。"
     else
         export USE_CDN=0
     fi
