@@ -54,7 +54,7 @@ function InitProxy() {
     read -r -p "启用代理? (y/N): " proxy_choice
     if [[ "$proxy_choice" =~ ^[Yy]$ ]]; then
         # 默认使用 ghproxy.com，你也可以让用户自定义镜像地址
-        GITHUB_PROXY="https://ghproxy.com/"
+        GITHUB_PROXY="https://gh.xxooo.cf/"
         echo -e '\033[1;32m已启用 GitHub 代理：'"$GITHUB_PROXY"\033[0m
     else
         GITHUB_PROXY=""

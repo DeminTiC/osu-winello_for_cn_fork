@@ -1,62 +1,60 @@
 #!/usr/bin/env bash
 
-## Welcome to your osu! launch script!
-## Most stuff here is explained with comments, but if you just need to add
-## any argument to osu!, use #LAUNCH_ARGS!
+## 欢迎使用 osu! 启动脚本！
+## 大多数内容都附有注释，如果你只需向 osu! 添加任何参数，请使用 #LAUNCH_ARGS！
 
-## If you ever need to change something to the osu! launcher besides args, just go to line ~68
+## 如果需要修改 osu! 启动器除参数以外的内容，请跳至约第 68 行
 
-export LAUNCH_ARGS="" # Use this for args like prime-run or gamemoderun!
+export LAUNCH_ARGS="" # 在此处使用参数，例如 prime-run 或 gamemoderun！
 
-export WINEESYNC=1 # PROTON_NO_ESYNC=1 is also needed to disable
-export WINEFSYNC=1 # PROTON_NO_FSYNC=1 is also needed to disable
+export WINEESYNC=1 # 若需禁用，也需要设置 PROTON_NO_ESYNC=1
+export WINEFSYNC=1 # 若需禁用，也需要设置 PROTON_NO_FSYNC=1
 export WINESERVER_PATH="$PROTONPATH/files/bin/wineserver"
 export PROTONPATH="$HOME/.local/share/osuconfig/proton-osu"
 export GAMEID="osu-wine-umu"
 UMU_RUN="$HOME/.local/share/osuconfig/umu-run"
 
-export WINE_BLOCK_GET_VERSION=1 # Hides wine ver. thanks to oglfreak's patch
+export WINE_BLOCK_GET_VERSION=1 # 隐藏 Wine 版本（感谢 oglfreak 的补丁）
 export WINEARCH=win64
 export WINEPREFIX="$HOME/.local/share/wineprefixes/osu-wineprefix"
 osuinstall=$(</"$HOME/.local/share/osuconfig/osupath")
 export OSUPATH="$osuinstall"
-export vblank_mode=0            # Disables vsync for mesa
-export __GL_SYNC_TO_VBLANK=0    # Disables vsync for NVIDIA >=510
-export WINEDLLOVERRIDES=winemenubuilder.exe=d# # Blocks wine from creating .desktop files
-export WINE_ENABLE_GLCHILD_HACK=1 # Set this to 0 to fix black top-panel in editor!
-export WINE_ENABLE_ABS_TABLET_HACK=0 # Set this to 1 to play with absolute mode in OTD on Wayland (might cause issues with cursor, but feel free to try!)
-
+export vblank_mode=0            # 关闭 Mesa 驱动的垂直同步
+export __GL_SYNC_TO_VBLANK=0    # 关闭 NVIDIA（>=510）驱动的垂直同步
+export WINEDLLOVERRIDES=winemenubuilder.exe=d# # 阻止 Wine 创建 .desktop 文件
+export WINE_ENABLE_GLCHILD_HACK=1 # 若编辑器顶部面板变黑，设为 0 可修复
+export WINE_ENABLE_ABS_TABLET_HACK=0 # 在 Wayland 下使用 OTD 的绝对模式时设为 1（可能导致光标异常，可自行尝试）
 
 function Info(){
     echo -e '\033[1;34m'"Winello:\033[0m $*";
 }
 
 function Error(){
-    echo -e '\033[1;31m'"Script failed:\033[0m $*"; exit 1;
+    echo -e '\033[1;31m'"脚本失败:\033[0m $*"; exit 1;
 }
 
 function Help(){
-    Info "Script features:
-    osu-wine: Runs osu!
-    osu-wine --winecfg : Runs winecfg on the osu! Wineprefix
-    osu-wine --winetricks: Install packages on osu! Wineprefix
-    osu-wine --regedit: Opens regedit on osu! Wineprefix
-    osu-wine --kill: Kills osu! and related processes in osu! Wineprefix
-    osu-wine --kill9: Kills osu! but with wineserver -k9
-    osu-wine --update: Updates wine-osu to latest version
-    osu-wine --w10fonts: Installs Windows 10 fonts from either GitHub or ISO (Needed to fix P characters etc.)
-    osu-wine --fixprefix: Reinstalls the osu! Wineprefix from system
-    osu-wine --info: Troubleshooting and more info
-    osu-wine --remove: Uninstalls osu! and the script
-    osu-wine --lutris: Copies wine-osu to lutris and shows instructions to add osu! there
-    osu-wine --changedir: Changes directory of the install according to the user
-    osu-wine --devserver <address>: Runs osu on with the specified devserver
-    osu-wine --fixfolders: Reinstalls registry keys for native file manager in case they break
-    osu-wine --fixsteamdeck: Reinstalls game dependencies after SteamOS updates
-    osu-wine --gosumemory: Installs and runs gosumemory without any needed config!"
+    Info "脚本功能：
+    osu-wine：运行 osu!
+    osu-wine --winecfg：在 osu! Wine 容器中打开 winecfg
+    osu-wine --winetricks：在 osu! Wine 容器中安装软件包
+    osu-wine --regedit：在 osu! Wine 容器中打开注册表编辑器
+    osu-wine --kill：终止 osu! 及 osu! Wine 容器中的相关进程
+    osu-wine --kill9：使用 wineserver -k9 强制终止 osu!
+    osu-wine --update：将 wine-osu 更新到最新版本
+    osu-wine --w10fonts：从 GitHub 或 ISO 安装 Windows 10 字体（修复 P 字符等显示问题）
+    osu-wine --fixprefix：从系统重新安装 osu! Wine 容器
+    osu-wine --info：故障排除及更多信息
+    osu-wine --remove：卸载 osu! 和本脚本
+    osu-wine --lutris：将 wine-osu 复制到 Lutris 并显示添加 osu! 的说明
+    osu-wine --changedir：根据用户选择更改安装目录
+    osu-wine --devserver <地址>：使用指定的开发服务器运行 osu!
+    osu-wine --fixfolders：重新安装原生文件管理器的注册表项（若损坏时使用）
+    osu-wine --fixsteamdeck：在 SteamOS 更新后重新安装游戏依赖
+    osu-wine --gosumemory：安装并运行 gosumemory，无需额外配置！"
 }
 
-function Checkshort(){      # Deletes useless shortcuts created when installing
+function Checkshort(){      # 删除安装时创建的无用快捷方式
     if [ -e "$HOME/.local/share/applications/wine/Programs/osu!.desktop" ] ; then
         rm -f "$HOME/.local/share/applications/wine/Programs/osu!.desktop" ; fi
 
@@ -70,16 +68,15 @@ function Update(){
     bash "/$HOME/.local/share/osuconfig/update/osu-winello.sh" update
 }
 
-
 case "$1" in
 
     '')
-    $LAUNCH_ARGS "$UMU_RUN" "$OSUPATH/osu!.exe" # osu! launcher
+    $LAUNCH_ARGS "$UMU_RUN" "$OSUPATH/osu!.exe" # osu! 启动器
     Checkshort
     ;;
 
     '--devserver')
-    $LAUNCH_ARGS "$UMU_RUN" "$OSUPATH/osu!.exe" -devserver "$2" # osu! launcher with specified devserver
+    $LAUNCH_ARGS "$UMU_RUN" "$OSUPATH/osu!.exe" -devserver "$2" # 使用指定开发服务器运行 osu!
     ;;
 
     '--regedit')
@@ -96,38 +93,38 @@ case "$1" in
 
     '--changedir')
     function deleteFolder(){
-        Info "Do you want to delete the previous install?"
-        read -r -p "$(Info "Choose your option (y/n): ")" dirchoice
+        Info "是否要删除之前的安装？"
+        read -r -p "$(Info "请选择 (y/n): ")" dirchoice
 
             if [ "$dirchoice" = 'y' ] || [ "$dirchoice" = 'Y' ]; then
-                read -r -p "$(Info "Are you sure? This will delete your files! (y/n)")" dirchoice2
+                read -r -p "$(Info "你确定吗？这将删除你的文件！(y/n)")" dirchoice2
 
                     if [ "$dirchoice2" = 'y' ] || [ "$dirchoice2" = 'Y' ]; then
                         lastdir=$(</"$HOME/.local/share/osuconfig/osupath")
-                        rm -rf "$lastdir/osu!" && Info "Cleaning done!"  
+                        rm -rf "$lastdir/osu!" && Info "清理完成！"  
                     else 
-                        Info "Skipping..."
+                        Info "跳过..."
                     fi
 
             else
-                Info "Skipping.." 
+                Info "跳过.." 
             fi 
     }
     
-    Info "Please choose your new directory:"
+    Info "请选择新的目录："
 
     newdir="$(zenity --file-selection --directory)"
     lastdir=$(</"$HOME/.local/share/osuconfig/osupath")
 
     rm -f "$HOME/.local/share/osuconfig/osupath"
     if [ -d "$newdir/osu!" ] || [ -s "$newdir/osu!.exe" ]; then
-        Info "osu! folder/game already exists: skipping.."
+        Info "osu! 文件夹/游戏已存在：跳过.."
 
         if [ -d "$newdir/osu!" ]; then
             OSUPATH="$newdir/osu!"
             echo "$OSUPATH" > "$HOME/.local/share/osuconfig/osupath"
 
-            Info "Change done from '$lastdir' to '$newdir'!"
+            Info "已将目录从 '$lastdir' 更改为 '$newdir'！"
             deleteFolder
         fi
 
@@ -135,7 +132,7 @@ case "$1" in
             OSUPATH="$newdir"
             echo "$OSUPATH" > "$HOME/.local/share/osuconfig/osupath"
 
-            Info "Change done from '$lastdir' to '$newdir'!"
+            Info "已将目录从 '$lastdir' 更改为 '$newdir'！"
             deleteFolder
         fi
 
@@ -144,14 +141,14 @@ case "$1" in
         OSUPATH="$newdir/osu!"
         echo "$OSUPATH" > "$HOME/.local/share/osuconfig/osupath"
 
-        Info "Downloading osu! to your new install.."
+        Info "正在将 osu! 下载到新安装目录.."
         wget -O "$OSUPATH/osu!.exe" "http://m1.ppy.sh/r/osu!install.exe" && wgetcheck6="$?"
 
         if [ ! "$wgetcheck6" = 0 ] ; then
-            Info "wget failed; trying with --no-check-certificate.."
+            Info "wget 失败，尝试使用 --no-check-certificate.."
             wget --no-check-certificate -O "$OSUPATH/osu!.exe" "http://m1.ppy.sh/r/osu!install.exe" ; fi
 
-        Info "Change done from '$lastdir' to '$newdir'!"
+        Info "已将目录从 '$lastdir' 更改为 '$newdir'！"
         deleteFolder
     fi
     ;;
@@ -179,10 +176,10 @@ case "$1" in
     ;;
 
     '--fixprefix')
-    Info "Checking for internet connection.."
-    ! ping -c 1 1.1.1.1 >/dev/null 2>&1 && Error "Please connect to internet before continuing xd. Run the script again"
+    Info "正在检查网络连接.."
+    ! ping -c 1 1.1.1.1 >/dev/null 2>&1 && Error "请连接互联网后再继续 xd。重新运行脚本"
     
-    Info "Deleting old Wineprefix..."
+    Info "正在删除旧的 Wine 容器..."
     rm -rf "$WINEPREFIX"
 
     export WINEPREFIX="$HOME/.local/share/wineprefixes/osu-wineprefix"
@@ -190,13 +187,13 @@ case "$1" in
     WINEESYNC=0 WINEFSYNC=0 PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1 "$UMU_RUN" \
     winetricks dotnet20 dotnet48 gdiplus_winxp win2k3
 
-    # Adding fixfolderosu again
+    # 再次添加 folderfixosu
     "$UMU_RUN" reg add "HKEY_CLASSES_ROOT\folder\shell\open\command"
     "$UMU_RUN" reg delete "HKEY_CLASSES_ROOT\folder\shell\open\ddeexec" /f
     "$UMU_RUN" reg add "HKEY_CLASSES_ROOT\folder\shell\open\command" /f /ve /t REG_SZ /d "/home/$USER/.local/share/osuconfig/folderfixosu xdg-open \"%1\""
 
     if [ ! -d "$WINEPREFIX/drive_c/winestreamproxy" ] ; then
-        Info "Configuring Winestreamproxy (Discord RPC)"
+        Info "正在配置 Winestreamproxy（Discord RPC）"
         wget --no-check-certificate "https://github.com/openglfreak/winestreamproxy/releases/download/v2.0.3/winestreamproxy-2.0.3-amd64.tar.gz" --output-document "/tmp/winestreamproxy-2.0.3-amd64.tar.gz"
         mkdir -p "/tmp/winestreamproxy"
         tar -xf "/tmp/winestreamproxy-2.0.3-amd64.tar.gz" -C "/tmp/winestreamproxy"
@@ -207,7 +204,7 @@ case "$1" in
         rm -rf "/tmp/winestreamproxy"
     fi
 
-    Info "Wineprefix is now working; launch osu! with osu-wine"
+    Info "Wine 容器已修复，使用 osu-wine 启动 osu! 即可"
     ;;
 
     '--gosumemory')
@@ -216,19 +213,19 @@ case "$1" in
         bash "$HOME/.local/share/osuconfig/update/osu-winello.sh" gosumemory
     fi
 
-    Info "Launching gosumemory..."
+    Info "正在启动 gosumemory..."
     WINE_PATH="$PROTONPATH/files/bin/wine"
     $WINE_PATH "$HOME/.local/share/osuconfig/gosumemory/gosumemory.exe"
     ;;
 
     '--info')
-    Info "Need info?:
-    Wineprefix location: $WINEPREFIX
-    osu! folder: '$OSUPATH'
+    Info "需要信息？：
+    Wine 容器位置：$WINEPREFIX
+    osu! 文件夹：'$OSUPATH'
 
-    If you need to add more options to osu!, see around line 68 of the script (ex. nano ~/.local/bin/osu-wine)
-    You can run 'osu-wine --help' to see all the script's functions (fix prefix, w10 fonts etc.)
-    You can find more troubleshooting and info at here: https://osu.ppy.sh/community/forums/topics/1248084?n=1"
+    如需为 osu! 添加更多选项，请查看脚本中约第 68 行（例如：nano ~/.local/bin/osu-wine）
+    可通过 'osu-wine --help' 查看脚本所有功能（修复容器、安装 w10 字体等）
+    更多故障排除和信息请访问：https://osu.ppy.sh/community/forums/topics/1248084?n=1"
     ;;
 
     '--help')
