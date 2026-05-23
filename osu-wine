@@ -177,7 +177,7 @@ case "$1" in
 
     '--fixprefix')
     Info "正在检查网络连接.."
-    ! ping -c 1 1.1.1.1 >/dev/null 2>&1 && Error "请连接互联网后再继续 xd。重新运行脚本"
+    ! ping -c 1 114.114.114.114 >/dev/null 2>&1 && Error "请连接互联网后再继续 xd。重新运行脚本"
     
     Info "正在删除旧的 Wine 容器..."
     rm -rf "$WINEPREFIX"
