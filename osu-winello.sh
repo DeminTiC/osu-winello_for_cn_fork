@@ -39,7 +39,7 @@ AKATSUKILINK="https://air_conditioning.akatsuki.gg/loader"
 MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v${MAPPINGTOOLSVERSION}/mapping_tools_installer_x64.exe"
 
 # 本仓库的 Git 地址
-WINELLOGIT="$custom_mirror${mirror_urls[$idx]}https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
+WINELLOGIT="https://ghproxy.mirror.skybyte.me/https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 
 # 根据用户选择返回镜像 URL
 # 支持的环境变量：
