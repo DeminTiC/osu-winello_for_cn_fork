@@ -39,7 +39,7 @@ AKATSUKILINK="https://air_conditioning.akatsuki.gg/loader"
 MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v${MAPPINGTOOLSVERSION}/mapping_tools_installer_x64.exe"
 
 # 本仓库的 Git 地址
-WINELLOGIT="https://github.com/NelloKudo/osu-winello.git"
+WINELLOGIT="$custom_mirror${mirror_urls[$idx]}https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 
 # 根据用户选择返回镜像 URL
 # 支持的环境变量：
@@ -189,6 +189,7 @@ _wget() {
 DownloadFile() {
     local url="$1"
     local output="$2"
+    url=$(get_mirror_url "$url")   # 核心修改：应用镜像转换
     Info "正在下载 $1 到 $2..."
     if [ -n "$wgetcommand" ] && command -v wget >/dev/null 2>&1; then
         _wget "$url" "$output" && return 0
@@ -321,7 +322,7 @@ InitialSetup() {
 
     # 检查网络
     Info "检查网络连接..."
-    ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && ! ping -c 2 bing.com >/dev/null 2>&1 && InstallError "请连接网络后重新运行脚本"
+    ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && ! ping -c 2 www.baidu.com >/dev/null 2>&1 && InstallError "请连接网络后重新运行脚本"
 
     # 检查依赖
     deps=(pgrep realpath wget zenity unzip)
