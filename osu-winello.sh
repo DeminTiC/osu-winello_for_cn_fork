@@ -1,35 +1,34 @@
 #!/usr/bin/env bash
 
 #   =======================================
-#   Welcome to Winello!
-#   The whole script is divided in different
-#   functions to make it easier to read.
-#   Feel free to contribute!
+#   欢迎使用 Winello！
+#   本脚本按函数组织，便于阅读和维护。
+#   欢迎贡献代码！
 #   =======================================
 
-# Wine-osu current versions for update
+# Wine-osu 当前版本
 MAJOR=11
 MINOR=12
 PATCH=1
 WINEVERSION=$MAJOR.$MINOR-$PATCH
 LASTWINEVERSION=0
 
-# Wine-osu mirror
+# Wine-osu 镜像链接
 WINELINK="https://github.com/NelloKudo/WineBuilder/releases/download/wine-osu-staging-${WINEVERSION}/wine-osu-winello-fonts-wow64-${WINEVERSION}-x86_64.tar.xz"
 WINECACHYLINK="https://github.com/NelloKudo/WineBuilder/releases/download/wine-osu-cachyos-v10.0-3/wine-osu-cachy-winello-fonts-wow64-10.0-3-x86_64.tar.xz"
 
-# Other versions for external downloads
+# 其他外部下载版本
 DISCRPCBRIDGEVERSION=1.4.1.3
 GOSUMEMORYVERSION=1.3.9
 TOSUVERSION=4.3.1
 YAWLVERSION=0.8.2
 MAPPINGTOOLSVERSION=1.12.27
 
-# Other download links
-WINETRICKSLINK="https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"                 # Winetricks for --fixprefix
-PREFIXLINK="https://github.com/NelloKudo/osu-winello/releases/download/winello-bins/osu-winello-prefix.tar.xz" # Default WINEPREFIX
-OSUMIMELINK="https://github.com/NelloKudo/osu-winello/releases/download/winello-bins/osu-mime.tar.gz"          # osu-mime (file associations)
-YAWLLINK="https://github.com/whrvt/yawl/releases/download/v${YAWLVERSION}/yawl"                                # yawl (Wine launcher for Steam Runtime)
+# 其他下载链接
+WINETRICKSLINK="https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"                 # Winetricks（用于 --fixprefix）
+PREFIXLINK="https://github.com/NelloKudo/osu-winello/releases/download/winello-bins/osu-winello-prefix.tar.xz" # 默认 WINEPREFIX
+OSUMIMELINK="https://github.com/NelloKudo/osu-winello/releases/download/winello-bins/osu-mime.tar.gz"          # osu-mime（文件关联）
+YAWLLINK="https://github.com/whrvt/yawl/releases/download/v${YAWLVERSION}/yawl"                                # yawl（Steam Runtime 下的 Wine 启动器）
 
 OSUDOWNLOADURL="https://m1.ppy.sh/r/osu!install.exe"
 
@@ -39,36 +38,67 @@ TOSULINK="https://github.com/tosuapp/tosu/releases/download/v${TOSUVERSION}/tosu
 AKATSUKILINK="https://air_conditioning.akatsuki.gg/loader"
 MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v${MAPPINGTOOLSVERSION}/mapping_tools_installer_x64.exe"
 
-# The URL for our git repo
+# 本仓库的 Git 地址
 WINELLOGIT="https://github.com/NelloKudo/osu-winello.git"
 
-# The directory osu-winello.sh is in
+# 根据用户选择返回镜像 URL
+# 支持的环境变量：
+#   USE_CDN   : 设为 1 启用镜像加速（默认 0）
+#   GITHUB_MIRROR : 指定镜像源（预定义名称或自定义完整 URL 前缀），未设置且 USE_CDN=1 时默认使用 'ghproxy'
+get_mirror_url() {
+    local url="$1"
+    if [ "${USE_CDN:-0}" != "1" ] || [[ "$url" != *"github.com"* && "$url" != *"raw.githubusercontent.com"* ]]; then
+        echo "$url"
+        return
+    fi
+
+    local selected="${GITHUB_MIRROR:-cdnghproxy}"
+    local mirror_prefix=""
+
+    local found=0
+    for i in "${!mirror_names[@]}"; do
+        if [ "${mirror_names[$i]}" = "$selected" ]; then
+            mirror_prefix="${mirror_urls[$i]}"
+            found=1
+            break
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        mirror_prefix="$selected"   # 视为自定义前缀
+    fi
+
+    local path="${url#https://}"
+    path="${path#http://}"
+    echo "${mirror_prefix}${path}"
+}
+
+# 脚本所在目录
 SCRDIR="$(realpath "$(dirname "$0")")"
-# The full path to osu-winello.sh
+# 脚本完整路径
 SCRPATH="$(realpath "$0")"
 
-# Exported global variables
-
+# 导出的全局变量
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 export BINDIR="${BINDIR:-$HOME/.local/bin}"
 
-OSUPATH="${OSUPATH:-}" # Could either be exported from the osu-wine launcher, from the osuconfig/osupath, or empty at first install (will set up in installOrChangeDir)
+OSUPATH="${OSUPATH:-}" # 可由 osu-wine 启动器或 osuconfig/osupath 提供，首次安装为空（将在 installOrChangeDir 中设置）
 
-# Don't rely on this! We should get the launcher path from `osu-wine --update`, this is a "hack" to support updating from umu
+# 不要依赖此变量！启动器路径应从 `osu-wine --update` 获取，这里作为后备
 if [ -z "${LAUNCHERPATH}" ]; then
     LAUNCHERPATH="$(realpath /proc/$PPID/exe)" || LAUNCHERPATH="$(readlink /proc/$PPID/exe)"
     [[ ! "${LAUNCHERPATH}" =~ .*osu.* ]] && LAUNCHERPATH=
 fi
-[ -z "${LAUNCHERPATH}" ] && LAUNCHERPATH="$BINDIR/osu-wine" # If we STILL couldn't find it, just use the default directory
+[ -z "${LAUNCHERPATH}" ] && LAUNCHERPATH="$BINDIR/osu-wine"
 
-export WINEDLLOVERRIDES="winemenubuilder.exe=;" # Blocks wine from creating .desktop files
-export WINEDEBUG="-wineboot,${WINEDEBUG:-}"     # Don't show "failed to start winemenubuilder"
+export WINEDLLOVERRIDES="winemenubuilder.exe=;" # 阻止 Wine 创建 .desktop 文件
+export WINEDEBUG="-wineboot,${WINEDEBUG:-}"     # 不显示 "failed to start winemenubuilder"
 
-export WINENTSYNC="${WINENTSYNC:-0}" # Don't use these for setup-related stuff to be safe
-export WINEFSYNC="${WINEFSYNC:-0}"   # (still, don't override launcher settings, because if wineserver is running with different settings, it will fail to start)
+export WINENTSYNC="${WINENTSYNC:-0}" # 设置相关操作不使用这些同步机制
+export WINEFSYNC="${WINEFSYNC:-0}"   # 避免已运行 wineserver 因参数不同而启动失败
 export WINEESYNC="${WINEESYNC:-0}"
 
-# Other shell local variables
+# 其他本地变量
 WINETRICKS="${WINETRICKS:-"$XDG_DATA_HOME/osuconfig/winetricks"}"
 YAWL_INSTALL_PATH="${YAWL_INSTALL_PATH:-"$XDG_DATA_HOME/osuconfig/yawl"}"
 export WINE="${WINE:-"${YAWL_INSTALL_PATH}-winello"}"
@@ -76,15 +106,15 @@ export WINESERVER="${WINESERVER:-"${WINE}server"}"
 export WINEPREFIX="${WINEPREFIX:-"$XDG_DATA_HOME/wineprefixes/osu-wineprefix"}"
 export WINE_INSTALL_PATH="${WINE_INSTALL_PATH:-"$XDG_DATA_HOME/osuconfig/wine-osu"}"
 
-# Make all paths visible to pressure-vessel
+# 使路径对 pressure-vessel 可见
 [ -z "${PRESSURE_VESSEL_FILESYSTEMS_RW}" ] && {
-    _mountline="$(df -P "$SCRPATH" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _mainscript_mount="${_mountline##* }:"  # mountpoint to main script path
-    _mountline="$(df -P "$LAUNCHERPATH" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _curdir_mount="${_mountline##* }:" # mountpoint to current directory
-    _mountline="$(df -P "$XDG_DATA_HOME" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _home_mount="${_mountline##* }:"  # mountpoint to XDG_DATA_HOME
+    _mountline="$(df -P "$SCRPATH" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _mainscript_mount="${_mountline##* }:"  # 脚本所在挂载点
+    _mountline="$(df -P "$LAUNCHERPATH" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _curdir_mount="${_mountline##* }:" # 当前目录挂载点
+    _mountline="$(df -P "$XDG_DATA_HOME" 2>/dev/null | tail -1)" && [ -n "${_mountline}" ] && _home_mount="${_mountline##* }:"  # XDG_DATA_HOME 挂载点
     PRESSURE_VESSEL_FILESYSTEMS_RW+="${_mainscript_mount:-}${_curdir_mount:-}${_home_mount:-}/mnt:/media:/run/media"
     [ -r "$XDG_DATA_HOME/osuconfig/osupath" ] && OSUPATH=$(</"$XDG_DATA_HOME/osuconfig/osupath") &&
-        PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH"):$(realpath "$OSUPATH"/Songs 2>/dev/null)" # mountpoint to osu/songs directory
-    export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"                       # clean any "just /" mounts, pressure-vessel doesn't like that
+        PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH"):$(realpath "$OSUPATH"/Songs 2>/dev/null)" # osu 目录和歌曲目录
+    export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"                       # 清理单独的 "/" 挂载
 }
 
 export LC_ALL=en_US.UTF-8
@@ -92,28 +122,28 @@ export LANG=en_US.UTF-8
 
 #   =====================================
 #   =====================================
-#           INSTALLER FUNCTIONS
+#           安装函数
 #   =====================================
 #   =====================================
 
-# Simple echo function (but with cool text e.e)
+# 信息输出（带颜色）
 Info() {
     echo -e '\033[1;34m'"Winello:\033[0m $*"
 }
 
 Warning() {
-    echo -e '\033[0;33m'"Winello (WARNING):\033[0m $*"
+    echo -e '\033[0;33m'"Winello (警告):\033[0m $*"
 }
 
-# Function to quit the install but not revert it in some cases
+# 退出但不回滚（某些情况下使用）
 Quit() {
     echo -e '\033[1;31m'"Winello:\033[0m $*"
     exit 1
 }
 
-# Function to revert the install in case of any type of fail
+# 回滚安装（出错时调用）
 Revert() {
-    echo -e '\033[1;31m'"Reverting install...:\033[0m"
+    echo -e '\033[1;31m'"正在回滚安装...:\033[0m"
     rm -f "$XDG_DATA_HOME/icons/osu-wine.png"
     rm -f "$XDG_DATA_HOME/applications/osu-wine.desktop"
     rm -f "$BINDIR/osu-wine"
@@ -126,24 +156,24 @@ Revert() {
     rm -f "$XDG_DATA_HOME/applications/osuwinello-url-handler.desktop"
     rm -f "/tmp/winestreamproxy-2.0.3-amd64.tar.xz"
     rm -rf "/tmp/winestreamproxy"
-    echo -e '\033[1;31m'"Reverting done, try again with ./osu-winello.sh\033[0m"
+    echo -e '\033[1;31m'"回滚完成，请重新运行 ./osu-winello.sh\033[0m"
     exit 1
 }
 
-# Error function pointing at Revert(), but with an appropriate message
+# 安装错误（调用 Revert）
 InstallError() {
-    echo -e '\033[1;31m'"Script failed:\033[0m $*"
+    echo -e '\033[1;31m'"脚本失败:\033[0m $*"
     Revert
 }
 
-# Error function for other features besides install
+# 其他功能的错误（不退出，由调用者处理）
 Error() {
-    echo -e '\033[1;31m'"Script failed:\033[0m $*"
-    return 0 # don't exit, handle errors ourselves, propagate result to launcher if needed
+    echo -e '\033[1;31m'"脚本失败:\033[0m $*"
+    return 0
 }
 
-# Shorthand for a lot of functions succeeding
-okay="eval Info Done! && return 0"
+# 简写（多个函数成功时返回）
+okay="eval Info 完成！ && return 0"
 
 wgetcommand="wget -q --show-progress"
 _wget() {
@@ -152,25 +182,25 @@ _wget() {
     $wgetcommand "$url" -O "$output" && return 0
     { [ $? = 2 ] && wgetcommand="wget"; } || wgetcommand="wget --no-check-certificate"
     $wgetcommand "$url" -O "$output" && return 0
-    wgetcommand='' # broken, use curl from now on
+    wgetcommand='' # 失败，后续改用 curl
     return 1
 }
 
 DownloadFile() {
     local url="$1"
     local output="$2"
-    Info "Downloading $1 to $2..."
+    Info "正在下载 $1 到 $2..."
     if [ -n "$wgetcommand" ] && command -v wget >/dev/null 2>&1; then
         _wget "$url" "$output" && return 0
-    fi # fall through to curl
+    fi
     if command -v curl >/dev/null 2>&1; then
         curl -sSL "$url" -o "$output" && return 0
     fi
-    Error "Failed to download $url. Check your connection."
+    Error "下载 $url 失败，请检查网络连接。"
     return 1
 }
 
-# detect the currently running shell by walking up the process tree
+# 检测当前运行的 Shell
 detectRunningShell() {
     local current_shell=""
     local ppid=$PPID
@@ -187,7 +217,7 @@ detectRunningShell() {
                 local proc_name=$(cat /proc/$ppid/comm)
 
                 case "$proc_name" in
-                    bash|zsh|fish|ksh|mksh|dash|tcsh|csh) # i surely hope these are enough...
+                    bash|zsh|fish|ksh|mksh|dash|tcsh|csh)
                         current_shell="$proc_name"
                         break
                         ;;
@@ -198,7 +228,6 @@ detectRunningShell() {
         fi
     done
 
-    # fallback to $SHELL if detection failed
     if [ -z "$current_shell" ]; then
         current_shell=$(basename "$SHELL")
     fi
@@ -206,22 +235,65 @@ detectRunningShell() {
     echo "$current_shell"
 }
 
-# Function looking for basic stuff needed for installation
+# 安装前的基本检查
 InitialSetup() {
-    # Better to not run the script as root, right?
-    if [ "$USER" = "root" ]; then InstallError "Please run the script without root"; fi
+    # 避免以 root 运行
+    if [ "$USER" = "root" ]; then InstallError "请不要使用 root 运行本脚本"; fi
 
-    # Checking for previous versions of osu-wine (mine or DiamondBurned's)
-    if [ -e /usr/bin/osu-wine ]; then Quit "Please uninstall old osu-wine (/usr/bin/osu-wine) before installing!"; fi
-    if [ -e "$BINDIR/osu-wine" ]; then Quit "Please uninstall Winello (osu-wine --remove) before installing!"; fi
+    # 检查旧版 osu-wine
+    if [ -e /usr/bin/osu-wine ]; then Quit "请在安装前卸载旧版 osu-wine (/usr/bin/osu-wine)！"; fi
+    if [ -e "$BINDIR/osu-wine" ]; then Quit "请在安装前卸载 Winello (osu-wine --remove)！"; fi
 
-    Info "Welcome to the script! Follow it to install osu! 8)"
+    Info "欢迎使用本脚本！跟随它安装 osu! :)"
 
-    # Checking if $BINDIR is in PATH:
+    # 询问下载镜像选择
+    mirror_names=("cdnghproxy" "chenc" "xxooo" "skybyte")
+    mirror_urls=("https://cdn.gh-proxy.org/" "https://github.chenc.dev/" "https://gh.xxooo.cf/" "https://ghproxy.mirror.skybyte.me/")
+    total_mirrors=${#mirror_names[@]}
+
+    Info "选择下载源（若提供的镜像速度不佳，可自定义）："
+    echo "1) GitHub 直连 (默认)"
+    for i in "${!mirror_names[@]}"; do
+        index=$((i + 2))
+        echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
+    done
+    custom_option=$((total_mirrors + 2))
+    echo "$custom_option) 自定义镜像前缀"
+    read -r -p "$(Info "请输入选择 [1-$custom_option]: ")" mirror_choice
+
+    case "$mirror_choice" in
+        1)
+            export USE_CDN=0
+            Info "使用直连下载"
+            ;;
+        "$custom_option")
+            export USE_CDN=1
+            read -r -p "$(Info "请输入自定义镜像前缀 (例如 https://cdn.gh-proxy.org/): ")" custom_mirror
+            if [[ -n "$custom_mirror" ]]; then
+                export GITHUB_MIRROR="$custom_mirror"
+                Info "已启用自定义镜像: $custom_mirror"
+            else
+                Info "输入为空，取消启用镜像"
+                export USE_CDN=0
+            fi
+            ;;
+        *)
+            if [[ "$mirror_choice" =~ ^[0-9]+$ ]] && [ "$mirror_choice" -ge 2 ] && [ "$mirror_choice" -lt "$custom_option" ]; then
+                idx=$((mirror_choice - 2))
+                export USE_CDN=1
+                export GITHUB_MIRROR="${mirror_names[$idx]}"
+                Info "已启用 CDN 镜像: ${mirror_names[$idx]} (${mirror_urls[$idx]})"
+            else
+                Info "无效选择，使用直连"
+                export USE_CDN=0
+            fi
+            ;;
+    esac
+
+    # 检查 $BINDIR 是否在 PATH 中
     mkdir -p "$BINDIR"
     pathcheck=$(echo "$PATH" | grep -q "$BINDIR" && echo "y")
 
-    # If $BINDIR is not in PATH:
     if [ "$pathcheck" != "y" ]; then
         current_shell=$(detectRunningShell)
 
@@ -229,39 +301,38 @@ InitialSetup() {
             bash)
                 touch -a "$HOME/.bashrc"
                 echo "export PATH=$BINDIR:\$PATH" >>"$HOME/.bashrc"
-                Info "Added $BINDIR to PATH in ~/.bashrc (restart shell or run: source ~/.bashrc)"
+                Info "已将 $BINDIR 添加到 ~/.bashrc 的 PATH 中（重启 shell 或执行 source ~/.bashrc）"
                 ;;
             zsh)
                 touch -a "$HOME/.zshrc"
                 echo "export PATH=$BINDIR:\$PATH" >>"$HOME/.zshrc"
-                Info "Added $BINDIR to PATH in ~/.zshrc (restart shell or run: source ~/.zshrc)"
+                Info "已将 $BINDIR 添加到 ~/.zshrc 的 PATH 中（重启 shell 或执行 source ~/.zshrc）"
                 ;;
             fish)
                 mkdir -p "$HOME/.config/fish" && touch -a "$HOME/.config/fish/config.fish"
                 fish -c "fish_add_path $BINDIR/"
-                Info "Added $BINDIR to PATH in fish config (restart shell)"
+                Info "已将 $BINDIR 添加到 fish 的 PATH 中（重启 shell）"
                 ;;
             *)
-                Warning "Could not detect shell ($current_shell). Please manually add $BINDIR to your PATH"
+                Warning "无法检测 shell ($current_shell)，请手动将 $BINDIR 添加到 PATH"
                 ;;
         esac
     fi
 
-    # Well, we do need internet ig...
-    Info "Checking for internet connection.."
-    ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && ! ping -c 2 google.com >/dev/null 2>&1 && InstallError "Please connect to internet before continuing xd. Run the script again"
+    # 检查网络
+    Info "检查网络连接..."
+    ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && ! ping -c 2 bing.com >/dev/null 2>&1 && InstallError "请连接网络后重新运行脚本"
 
-    # Looking for dependencies..
+    # 检查依赖
     deps=(pgrep realpath wget zenity unzip)
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
-            InstallError "Please install $dep before continuing!"
+            InstallError "请先安装 $dep 再继续！"
         fi
     done
 }
 
-# Helper to wait for wineserver to close before continuing to a next step, reduces the chance of flakiness
-# Don't return failure, it's probably harmless, unrelated, or unreliable to use as a success indicator (besides specific cases)
+# 等待 wineserver 退出，减少后续步骤的不确定性
 waitWine() {
     {
         "$WINESERVER" -w
@@ -270,21 +341,21 @@ waitWine() {
     return 0
 }
 
-# Function to install script files, yawl and Wine-osu
+# 安装脚本文件、yawl 和 Wine-osu
 InstallWine() {
-    # Installing game launcher and related...
-    Info "Installing game script:"
+    # 安装游戏启动器
+    Info "正在安装游戏脚本..."
     cp "${SCRDIR}/osu-wine" "$BINDIR/osu-wine" && chmod +x "$BINDIR/osu-wine"
 
-    Info "Installing icons:"
+    Info "正在安装图标..."
     mkdir -p "$XDG_DATA_HOME/icons"
     cp "${SCRDIR}/stuff/osu-wine.png" "$XDG_DATA_HOME/icons/osu-wine.png" && chmod 644 "$XDG_DATA_HOME/icons/osu-wine.png"
 
-    Info "Installing .desktop:"
+    Info "正在安装 .desktop 文件..."
     mkdir -p "$XDG_DATA_HOME/applications"
     echo "[Desktop Entry]
 Name=osu!(stable)
-Comment=osu!(stable) - Rhythm is just a *click* away!
+Comment=osu!(stable) - 节奏只需轻轻一按！
 Type=Application
 Exec=$BINDIR/osu-wine %U
 Icon=$XDG_DATA_HOME/icons/osu-wine.png
@@ -293,91 +364,75 @@ Categories=Wine;Game;" | tee "$XDG_DATA_HOME/applications/osu-wine.desktop" >/de
     chmod +x "$XDG_DATA_HOME/applications/osu-wine.desktop"
 
     if [ -d "$XDG_DATA_HOME/osuconfig" ]; then
-        Info "Skipping osuconfig.."
+        Info "跳过 osuconfig 目录（已存在）..."
     else
         mkdir "$XDG_DATA_HOME/osuconfig"
     fi
 
-    Info "Installing Wine-osu:"
-    # Downloading Wine..
-    DownloadFile "$WINELINK" "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" || InstallError "Couldn't download wine-osu."
+    Info "正在安装 Wine-osu..."
+    DownloadFile "$WINELINK" "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" || InstallError "下载 wine-osu 失败"
 
-    # This will extract Wine-osu and set last version to the one downloaded
     tar -xf "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" -C "$XDG_DATA_HOME/osuconfig"
     LASTWINEVERSION="$WINEVERSION"
     rm -f "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz"
 
-    # Install and verify yawl ASAP, the wrapper mode does not download/install the runtime if no arguments are passed
+    # 尽快安装和验证 yawl
     installYawl || Revert
 
-    # The update function works under this folder: it compares variables from files stored in osuconfig
-    # with latest values from GitHub and check whether to update or not
-    Info "Installing script copy for updates.."
+    # 用于更新的脚本副本
+    Info "正在安装用于更新的脚本副本..."
     mkdir -p "$XDG_DATA_HOME/osuconfig/update"
 
     { git clone . "$XDG_DATA_HOME/osuconfig/update" || git clone "${WINELLOGIT}" "$XDG_DATA_HOME/osuconfig/update"; } ||
-        InstallError "Git failed, check your connection.."
+        InstallError "Git 克隆失败，请检查网络连接"
 
     git -C "$XDG_DATA_HOME/osuconfig/update" remote set-url origin "${WINELLOGIT}"
 
     echo "$LASTWINEVERSION" >>"$XDG_DATA_HOME/osuconfig/wineverupdate"
 }
 
-# Function configuring folders to install the game
+# 配置安装游戏文件夹
 InitialOsuInstall() {
     local installpath=1
-    Info "Where do you want to install the game?:
-          1 - Default path ($XDG_DATA_HOME/osu-wine)
-          2 - Custom path"
-    read -r -p "$(Info "Choose your option: ")" installpath
+    Info "请选择游戏安装位置：
+          1 - 默认路径 ($XDG_DATA_HOME/osu-wine)
+          2 - 自定义路径"
+    read -r -p "$(Info "请选择 [1-2]: ")" installpath
 
     case "$installpath" in
     '2')
         installOrChangeDir || return 1
         ;;
     *)
-        Info "Installing to default.. ($XDG_DATA_HOME/osu-wine)"
+        Info "安装到默认路径 ($XDG_DATA_HOME/osu-wine)"
         installOrChangeDir "$XDG_DATA_HOME/osu-wine" || return 1
         ;;
     esac
     $okay
 }
 
-# Here comes the real Winello 8)
-# What the script will install, in order, is:
-# - osu!mime and osu!handler to properly import skins and maps
-# - Wineprefix
-# - Regedit keys to integrate native file manager with Wine
-# - rpc-bridge for Discord RPC (flatpak users, google "flatpak discord rpc")
+# 完整安装流程
 FullInstall() {
-    # Time to install my prepackaged Wineprefix, which works in most cases
-    # The script is still bundled with osu-wine --fixprefix, which should do the job for me as well
-
-    mkdir -p "$XDG_DATA_HOME/osuconfig/configs" # make the configs directory and copy the example if it doesnt exist
+    mkdir -p "$XDG_DATA_HOME/osuconfig/configs"
     [ ! -r "$XDG_DATA_HOME/osuconfig/configs/example.cfg" ] && cp "${SCRDIR}/stuff/example.cfg" "$XDG_DATA_HOME/osuconfig/configs/example.cfg"
 
-    Info "Configuring Wineprefix:"
+    Info "正在配置 Wineprefix..."
 
-    # Variable to check if download finished properly
     local failprefix="false"
     mkdir -p "$XDG_DATA_HOME/wineprefixes"
     if [ -r "$XDG_DATA_HOME/wineprefixes/osu-wineprefix/system.reg" ]; then
-        Info "Wineprefix already exists; do you want to reinstall it?"
-        Warning "HIGHLY RECOMMENDED UNLESS YOU KNOW WHAT YOU'RE DOING!"
-        read -r -p "$(Info "Choose (y/N): ")" prefchoice
+        Info "Wineprefix 已存在，是否重新安装？"
+        Warning "除非你清楚后果，否则建议重新安装！"
+        read -r -p "$(Info "请选择 (y/N): ")" prefchoice
         if [ "$prefchoice" = 'y' ] || [ "$prefchoice" = 'Y' ]; then
             rm -rf "$XDG_DATA_HOME/wineprefixes/osu-wineprefix"
         fi
     fi
 
-    # So if there's no prefix (or the user wants to reinstall):
     if [ ! -r "$XDG_DATA_HOME/wineprefixes/osu-wineprefix/system.reg" ]; then
-        # Downloading prefix in temporary ~/.winellotmp folder
-        # to make up for this issue: https://github.com/NelloKudo/osu-winello/issues/36
         mkdir -p "$HOME/.winellotmp"
         DownloadFile "${PREFIXLINK}" "$HOME/.winellotmp/osu-winello-prefix.tar.xz" || Revert
 
-        # Checking whether to create prefix manually or install it from repos
         if [ "$failprefix" = "true" ]; then
             reconfigurePrefix nowinepath fresh || Revert
         else
@@ -385,31 +440,29 @@ FullInstall() {
             mv "$XDG_DATA_HOME/wineprefixes/osu-prefix" "$XDG_DATA_HOME/wineprefixes/osu-wineprefix"
             reconfigurePrefix nowinepath || Revert
         fi
-        # Cleaning..
         rm -rf "$HOME/.winellotmp"
     fi
 
-    # Now set up desktop files and such, no matter whether its a new or old prefix
     osuHandlerSetup || Revert
 
-    Info "Configure and install osu!"
+    Info "配置并安装 osu!"
     InitialOsuInstall || Revert
 
-    Info "Installation is completed! Run 'osu-wine' to play osu!"
-    Warning "If 'osu-wine' doesn't work, just close and relaunch your terminal."
+    Info "安装完成！运行 'osu-wine' 即可开始游戏！"
+    Warning "如果 'osu-wine' 无法运行，请关闭并重新打开终端。"
     exit 0
 }
 
 #   =====================================
 #   =====================================
-#          POST-INSTALL FUNCTIONS
+#         安装后功能函数
 #   =====================================
 #   =====================================
 
 longPathsFix() {
-    Info "Applying fix for long song names (e.g. because of deeply nested osu! folder)..."
+    Info "正在修复长歌曲名称问题（例如因 osu! 文件夹嵌套过深）..."
 
-    # replace default wineprefix username with user's username
+    # 将默认 wineprefix 用户名替换为当前用户
     sed -i -e "s|nellokudo|${USER}|g" "${WINEPREFIX}"/{userdef.reg,user.reg,system.reg}
 
     rm -rf "$WINEPREFIX/dosdevices"
@@ -417,7 +470,7 @@ longPathsFix() {
     mkdir -p "$WINEPREFIX/dosdevices"
     ln -s "$WINEPREFIX/drive_c/" "$WINEPREFIX/dosdevices/c:"
     ln -s / "$WINEPREFIX/dosdevices/z:"
-    ln -s "$OSUPATH" "$WINEPREFIX/dosdevices/d:" 2>/dev/null # it's fine if this fails on a fresh install
+    ln -s "$OSUPATH" "$WINEPREFIX/dosdevices/d:" 2>/dev/null # 首次安装时可能失败，无影响
     waitWine wineboot -u
     return 0
 }
@@ -426,18 +479,18 @@ saveOsuWinepath() {
     local osupath="${OSUPATH}"
     if [ -z "${osupath}" ]; then
         { [ -r "$XDG_DATA_HOME/osuconfig/osupath" ] && osupath=$(<"$XDG_DATA_HOME/osuconfig/osupath"); } || {
-            Error "Can't find the osu! path!" && return 1
+            Error "找不到 osu! 路径！" && return 1
         }
     fi
 
-    Info "Saving a copy of the osu! path..."
+    Info "正在保存 osu! 路径副本..."
 
     PRESSURE_VESSEL_FILESYSTEMS_RW="$(realpath "$osupath"):$(realpath "$osupath"/Songs 2>/dev/null):${PRESSURE_VESSEL_FILESYSTEMS_RW}"
     export PRESSURE_VESSEL_FILESYSTEMS_RW
 
     local temp_winepath
     temp_winepath="$(waitWine winepath -w "$osupath")"
-    [ -z "${temp_winepath}" ] && Error "Couldn't get the osu! path from winepath... Check $osupath/osu!.exe ?" && return 1
+    [ -z "${temp_winepath}" ] && Error "无法通过 winepath 获取 osu! 路径，请检查 $osupath/osu!.exe 是否存在" && return 1
 
     echo -n "${temp_winepath}" >"$XDG_DATA_HOME/osuconfig/.osu-path-winepath"
     echo -n "${temp_winepath}osu!.exe" >"$XDG_DATA_HOME/osuconfig/.osu-exe-winepath"
@@ -446,33 +499,33 @@ saveOsuWinepath() {
 
 deleteFolder() {
     local folder="${1}"
-    Info "Do you want to remove the previous install at ${folder}?"
-    read -r -p "$(Info "Choose your option (y/N): ")" dirchoice
+    Info "是否删除之前的安装目录 ${folder}？"
+    read -r -p "$(Info "请选择 (y/N): ")" dirchoice
 
     if [ "$dirchoice" = 'y' ] || [ "$dirchoice" = 'Y' ]; then
-        read -r -p "$(Info "Are you sure? This WILL delete your osu! files! (y/N)")" dirchoice2
+        read -r -p "$(Info "确定吗？这将删除你的 osu! 文件！(y/N): ")" dirchoice2
         if [ "$dirchoice2" = 'y' ] || [ "$dirchoice2" = 'Y' ]; then
-            rm -rf "${folder}" || { Error "Couldn't remove folder!" && return 1; }
+            rm -rf "${folder}" || { Error "无法删除文件夹！" && return 1; }
             return 0
         fi
     fi
-    Info "Skipping.."
+    Info "跳过删除。"
     return 0
 }
 
-# Handle `osu-wine --changedir` and installation setup
+# 处理 `osu-wine --changedir` 和安装目录设置
 installOrChangeDir() {
     local newdir="${1:-}"
     local lastdir="${OSUPATH:-}"
     if [ -z "${newdir}" ]; then
-        Info "Please choose your osu! directory:"
+        Info "请选择 osu! 目录："
         newdir="$(zenity --file-selection --directory)"
-        [ ! -d "$newdir" ] && { Error "No folder selected, please make sure zenity is installed.." && return 1; }
+        [ ! -d "$newdir" ] && { Error "未选择文件夹，请确保 zenity 已安装" && return 1; }
     fi
 
-    [ ! -s "$newdir/osu!.exe" ] && newdir="$newdir/osu!" # Make it a subdirectory unless osu!.exe is already there
+    [ ! -s "$newdir/osu!.exe" ] && newdir="$newdir/osu!"
     if [ -s "$newdir/osu!.exe" ] || [ "$newdir" = "$lastdir" ]; then
-        Info "The osu! installation already exists..."
+        Info "osu! 已存在..."
     else
         mkdir -p "$newdir"
         DownloadFile "${OSUDOWNLOADURL}" "$newdir/osu!.exe" || return 1
@@ -480,12 +533,12 @@ installOrChangeDir() {
         [ -n "${lastdir}" ] && { deleteFolder "$lastdir" || return 1; }
     fi
 
-    echo "${newdir}" >"$XDG_DATA_HOME/osuconfig/osupath" # Save it for later
+    echo "${newdir}" >"$XDG_DATA_HOME/osuconfig/osupath"
     export OSUPATH="${newdir}"
 
     longPathsFix || return 1
     saveOsuWinepath || return 1
-    Info "osu! installed to '$newdir'!"
+    Info "osu! 已安装到 '$newdir'！"
     return 0
 }
 
@@ -508,38 +561,37 @@ reconfigurePrefix() {
     installWinetricks
 
     [ -n "${freshprefix}" ] && {
-        Info "Checking for internet connection.." # The bundled prefix install already checks for internet, so no point checking again
-        ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && { Error "Please connect to internet before continuing xd. Run the script again" && return 1; }
+        Info "正在检查网络连接..."
+        ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && { Error "请连接网络后重新运行脚本" && return 1; }
 
         [ -d "${WINEPREFIX:?}" ] && rm -rf "${WINEPREFIX}"
 
-        Info "Downloading and installing a new prefix with winetricks. This might take a while, so go make a coffee or something."
+        Info "正在下载并使用 winetricks 安装新 prefix，这可能需要一段时间..."
         "$WINESERVER" -k
         PATH="${SCRDIR}/stuff:${PATH}" WINEDEBUG="fixme-winediag,${WINEDEBUG:-}" WINENTSYNC=0 WINEESYNC=0 WINEFSYNC=0 \
             "$WINETRICKS" -q nocrashdialog autostart_winedbg=disabled dotnet48 dotnet20 gdiplus_winxp meiryo dxvk win10 ||
-            { Error "winetricks failed catastrophically!" && return 1; }
+            { Error "winetricks 执行失败！" && return 1; }
     }
 
     folderFixSetup || return 1
     discordRpc || return 1
 
-    # save the osu winepath with the new folder, unless its a first-time install (need to install osu first)
     [ -z "${nowinepath}" ] && { saveOsuWinepath || return 1; }
 
     $okay
 }
 
 redownloadPrefix() {
-    Info "Checking for internet connection.."
-    ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && { Error "Please connect to internet before continuing xd. Run the script again" && return 1; }
+    Info "正在检查网络连接..."
+    ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && { Error "请连接网络后重新运行脚本" && return 1; }
 
     [ -d "${WINEPREFIX:?}" ] && rm -rf "${WINEPREFIX}"
 
-    Info "Downloading prefix.. this might take a while."
+    Info "正在下载 prefix，可能需要一段时间..."
     mkdir -p "$HOME/.winellotmp"
     DownloadFile "${PREFIXLINK}" "$HOME/.winellotmp/osu-winello-prefix.tar.xz" || { rm -rf "$HOME/.winellotmp" && return 1; }
 
-    Info "Extracting prefix.."
+    Info "正在解压 prefix..."
     tar -xf "$HOME/.winellotmp/osu-winello-prefix.tar.xz" -C "$XDG_DATA_HOME/wineprefixes" || { rm -rf "$HOME/.winellotmp" && return 1; }
     mv "$XDG_DATA_HOME/wineprefixes/osu-prefix" "$XDG_DATA_HOME/wineprefixes/osu-wineprefix"
     rm -rf "$HOME/.winellotmp"
@@ -547,9 +599,9 @@ redownloadPrefix() {
     reconfigurePrefix || return 1
 }
 
-# Remember whether the user wants to overwrite their local files
+# 询问用户是否覆盖本地文件，并记住选择
 askConfirmTimeout() {
-    [ -z "${1:-}" ] && Info "Missing an argument for ${FUNCNAME[0]}!?" && exit 1
+    [ -z "${1:-}" ] && Info "${FUNCNAME[0]} 缺少参数！" && exit 1
 
     local rememberfile="${XDG_DATA_HOME}/osuconfig/rememberupdatechoice"
     touch "${rememberfile}"
@@ -558,54 +610,54 @@ askConfirmTimeout() {
     lastchoice="$(grep "${1}" "${rememberfile}" | grep -Eo '(y|n)' | tail -n 1)"
 
     if [ -n "$lastchoice" ] && [ "$lastchoice" = "n" ]; then
-        Info "Won't update ${1}, using saved choice from ${rememberfile}"
-        Info "Remove this file if you've changed your mind."
+        Info "不会更新 ${1}，使用保存在 ${rememberfile} 中的选择"
+        Info "如果要更改，请删除该文件。"
         return 1
     elif [ -n "$lastchoice" ] && [ "$lastchoice" = "y" ]; then
-        Info "Will update ${1}, using saved choice from ${rememberfile}"
-        Info "Remove this file if you've changed your mind."
+        Info "将更新 ${1}，使用保存在 ${rememberfile} 中的选择"
+        Info "如果要更改，请删除该文件。"
         return 0
     fi
 
-    local _timeout=${2:-7} # use a 7 second timeout unless manually specified
-    echo -n "$(Info "Choose: (Y/n) [${_timeout}s] ")"
+    local _timeout=${2:-7}
+    echo -n "$(Info "请选择 (Y/n) [${_timeout}s] ")"
 
     read -t "$_timeout" -r prefchoice
 
     if [[ "$prefchoice" =~ ^(n|N)(o|O)?$ ]]; then
-        Info "Okay, won't update ${1}, saving this choice to ${rememberfile}."
+        Info "好的，不会更新 ${1}，将此选择保存到 ${rememberfile}。"
         echo "${1} n" >>"${rememberfile}"
         return 1
     fi
-    Info "Will update ${1}, saving this choice to ${rememberfile}."
+    Info "将更新 ${1}，将此选择保存到 ${rememberfile}。"
     echo "${1} y" >>"${rememberfile}"
     echo ""
     return 0
 }
 
-# A helper for updating the osu-wine launcher itself
+# 更新 osu-wine 启动器本身
 launcherUpdate() {
     local launcher="${1}"
     local update_source="$XDG_DATA_HOME/osuconfig/update/osu-wine"
     local backup_path="$XDG_DATA_HOME/osuconfig/osu-wine.bak"
 
     if [ ! -f "$update_source" ]; then
-        Warning "Update source not found: $update_source"
+        Warning "更新源未找到: $update_source"
         return 1
     fi
 
     if ! cp -f "$launcher" "$backup_path"; then
-        Warning "Failed to create backup at $backup_path"
+        Warning "无法创建备份到 $backup_path"
         return 1
     fi
 
     if ! cp -f "$update_source" "$launcher"; then
-        Warning "Failed to apply update to $launcher"
-        Warning "Attempting to restore from backup..."
+        Warning "应用更新到 $launcher 失败"
+        Warning "尝试从备份恢复..."
 
         if ! cp -f "$backup_path" "$launcher"; then
-            Warning "Failed to restore backup - system may be in inconsistent state"
-            Warning "Manual restoration required from: $backup_path"
+            Warning "恢复备份失败 - 系统可能处于不一致状态"
+            Warning "需要手动从 $backup_path 恢复"
             return 1
         fi
         return 1
@@ -613,99 +665,163 @@ launcherUpdate() {
 
     if ! chmod --reference="$backup_path" "$launcher" 2>/dev/null; then
         chmod +x "$launcher" 2>/dev/null || {
-            Warning "Failed to set executable permissions on $launcher"
+            Warning "无法设置 $launcher 的可执行权限"
             return 1
         }
     fi
     $okay
 }
 
+# 自动检测发行版并安装 aria2c
+auto_install_aria2() {
+    local install_cmd=""
+    local pkg_manager=""
+
+    if command -v apt-get >/dev/null 2>&1; then
+        pkg_manager="apt-get"
+        install_cmd="apt-get update && apt-get install -y aria2"
+    elif command -v apt >/dev/null 2>&1; then
+        pkg_manager="apt"
+        install_cmd="apt update && apt install -y aria2"
+    elif command -v dnf >/dev/null 2>&1; then
+        pkg_manager="dnf"
+        install_cmd="dnf install -y aria2 || (dnf install -y epel-release && dnf install -y aria2)"
+    elif command -v yum >/dev/null 2>&1; then
+        pkg_manager="yum"
+        install_cmd="yum install -y aria2 || (yum install -y epel-release && yum install -y aria2)"
+    elif command -v pacman >/dev/null 2>&1; then
+        pkg_manager="pacman"
+        install_cmd="pacman -Sy --noconfirm aria2"
+    elif command -v zypper >/dev/null 2>&1; then
+        pkg_manager="zypper"
+        install_cmd="zypper install -y aria2"
+    elif command -v apk >/dev/null 2>&1; then
+        pkg_manager="apk"
+        install_cmd="apk add aria2"
+    elif command -v xbps-install >/dev/null 2>&1; then
+        pkg_manager="xbps"
+        install_cmd="xbps-install -y aria2"
+    elif command -v emerge >/dev/null 2>&1; then
+        pkg_manager="emerge"
+        install_cmd="emerge --ask=n --autounmask-write y aria2"
+    else
+        echo "错误：未找到支持的包管理器，请手动安装 aria2c" >&2
+        return 1
+    fi
+
+    Info "检测到包管理器：$pkg_manager，将使用命令安装 aria2c：$install_cmd"
+    if command -v sudo >/dev/null 2>&1; then
+        sudo sh -c "$install_cmd"
+    else
+        sh -c "$install_cmd"
+    fi
+}
+
 installYawl() {
-    Info "Installing yawl..."
+    Info "正在安装 yawl..."
     DownloadFile "$YAWLLINK" "/tmp/yawl" || return 1
     mv "/tmp/yawl" "$XDG_DATA_HOME/osuconfig"
     chmod +x "$YAWL_INSTALL_PATH"
 
-    # Also setup yawl here, this will be required anyways when updating from umu-based osu-wine versions
+    # 防止 yawl 自行下载运行时
+    local YAWL_CACHE_DIR="$XDG_DATA_HOME/yawl"
+    local RUNTIME_FILE_NAME="SteamLinuxRuntime_sniper.tar.xz"
+    local RUNTIME_FILE="${YAWL_CACHE_DIR}/${RUNTIME_FILE_NAME}"
+    local RUNTIME_URL="https://repo.steampowered.com/steamrt-images-sniper/snapshots/latest-container-runtime-public-beta/${RUNTIME_FILE_NAME}"
+
+    if [ ! -f "$RUNTIME_FILE" ]; then
+        mkdir -p "$YAWL_CACHE_DIR"
+
+        if ! command -v aria2c >/dev/null 2>&1; then
+            Info "aria2c 未安装，尝试自动安装..."
+            if ! auto_install_aria2; then
+                Warning "无法自动安装 aria2c，将使用单线程下载（较慢）"
+            fi
+        fi
+
+        if command -v aria2c >/dev/null 2>&1; then
+            Info "使用 aria2c 多线程下载 Steam Linux Runtime..."
+            aria2c -x 16 -s 16 -k 1M -d "$YAWL_CACHE_DIR" -o "$RUNTIME_FILE_NAME" "$RUNTIME_URL" \
+                || Warning "aria2c 下载失败，将回退至 yawl 默认下载"
+        fi
+    else
+        Info "Steam Linux Runtime 已存在，跳过下载"
+    fi
+
+    # 配置 yawl
     YAWL_VERBS="make_wrapper=winello;exec=$WINE_INSTALL_PATH/bin/wine;wineserver=$WINE_INSTALL_PATH/bin/wineserver" "$YAWL_INSTALL_PATH"
-    YAWL_VERBS="update;verify;exec=/bin/true" "$YAWL_INSTALL_PATH" || { Error "There was an error setting up yawl!" && return 1; }
+    YAWL_VERBS="update;verify;exec=/bin/true" "$YAWL_INSTALL_PATH" || { Error "设置 yawl 失败！" && return 1; }
     $okay
 }
 
-# This function reads files located in $XDG_DATA_HOME/osuconfig
-# to see whether a new wine-osu version has been released.
+# 检查更新
 Update() {
     local launcher_path="${1:-"${LAUNCHERPATH}"}"
     if [ ! -x "$WINE" ]; then
         rm -f "${XDG_DATA_HOME}/osuconfig/rememberupdatechoice"
-        installYawl || Info "Continuing, but things might be broken..."
+        installYawl || Info "继续，但可能存在问题..."
     else
         local INSTALLED_YAWL_VERSION
         INSTALLED_YAWL_VERSION="$(env "YAWL_VERBS=version" "$WINE" 2>/dev/null)"
         if [[ "$INSTALLED_YAWL_VERSION" =~ 0\.5\.* ]]; then
-            installYawl || Info "Continuing, but things might be broken..."
+            installYawl || Info "继续，但可能存在问题..."
         else
-            Info "Checking for yawl updates..."
+            Info "正在检查 yawl 更新..."
             YAWL_VERBS="update" "$WINE" "--version"
         fi
     fi
 
-    # Reading the last version installed
     [ -r "$XDG_DATA_HOME/osuconfig/wineverupdate" ] && LASTWINEVERSION=$(</"$XDG_DATA_HOME/osuconfig/wineverupdate")
 
     if [ "$LASTWINEVERSION" \!= "$WINEVERSION" ]; then
-        # Downloading Wine..
         DownloadFile "$WINELINK" "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" || return 1
 
-        # This will extract Wine-osu and set last version to the one downloaded
-        Info "Updating Wine-osu"...
+        Info "正在更新 Wine-osu..."
         rm -rf "$XDG_DATA_HOME/osuconfig/wine-osu"
         tar -xf "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" -C "$XDG_DATA_HOME/osuconfig"
         rm -f "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz"
 
         echo "$WINEVERSION" >"$XDG_DATA_HOME/osuconfig/wineverupdate"
-        Info "Update is completed!"
+        Info "更新完成！"
         waitWine wineboot -u
     else
-        Info "Your Wine-osu is already up-to-date!"
+        Info "Wine-osu 已是最新！"
     fi
 
-    mkdir -p "$XDG_DATA_HOME/osuconfig/configs" # make the configs directory and copy the example if it doesnt exist
+    mkdir -p "$XDG_DATA_HOME/osuconfig/configs"
     [ ! -r "$XDG_DATA_HOME/osuconfig/configs/example.cfg" ] && cp "${SCRDIR}/stuff/example.cfg" "$XDG_DATA_HOME/osuconfig/configs/example.cfg"
 
-    # Will be required when updating from umu-launcher
     [ ! -r "$XDG_DATA_HOME/osuconfig/.osu-path-winepath" ] && { saveOsuWinepath || return 1; }
 
-    [ -n "$NOLAUNCHERUPDATE" ] && Info "Your osu-wine launcher will be left alone." && $okay
+    [ -n "$NOLAUNCHERUPDATE" ] && Info "osu-wine 启动器将保持不变。" && $okay
 
-    [ ! -x "${launcher_path}" ] && { Error "Can't find the path to the osu-wine launcher to update it. Please reinstall osu-winello." && return 1; }
+    [ ! -x "${launcher_path}" ] && { Error "找不到 osu-wine 启动器路径，请重新安装 osu-winello。" && return 1; }
 
     if [ ! -w "${launcher_path}" ]; then
-        Warning "Note: ${launcher_path} is not writable - updating the osu-wine launcher will not be possible"
-        Warning "Try running the update with appropriate permissions if you want to update the launcher,"
-        Warning "   or move it to a place like $BINDIR and then run it from there."
+        Warning "注意：${launcher_path} 不可写，无法更新 osu-wine 启动器"
+        Warning "如需更新，请以适当权限运行，或将其移动到 $BINDIR 后再运行。"
         return 0
     fi
 
-    Info "Updating the launcher (${launcher_path})..."
+    Info "正在更新启动器 (${launcher_path})..."
     if launcherUpdate "${launcher_path}"; then
-        Info "Launcher update successful!"
-        Info "Backup saved to: $XDG_DATA_HOME/osuconfig/osu-wine.bak"
+        Info "启动器更新成功！"
+        Info "备份保存至：$XDG_DATA_HOME/osuconfig/osu-wine.bak"
     else
-        Error "Launcher update failed" && return 1
+        Error "启动器更新失败" && return 1
     fi
     $okay
 }
 
-# Well, simple function to install the game (also implement in osu-wine --remove)
+# 卸载
 Uninstall() {
-    Info "Uninstalling icons:"
+    Info "正在卸载图标..."
     rm -f "$XDG_DATA_HOME/icons/osu-wine.png"
 
-    Info "Uninstalling .desktop:"
+    Info "正在卸载 .desktop 文件..."
     rm -f "$XDG_DATA_HOME/applications/osu-wine.desktop"
 
-    Info "Uninstalling game script, utilities & folderfix:"
+    Info "正在卸载游戏脚本、工具和文件夹修复..."
     rm -f "$BINDIR/osu-wine"
     rm -f "$BINDIR/folderfixosu"
     rm -f "$BINDIR/folderfixosu.vbs"
@@ -713,27 +829,27 @@ Uninstall() {
     rm -f "$XDG_DATA_HOME/applications/osuwinello-file-extensions-handler.desktop"
     rm -f "$XDG_DATA_HOME/applications/osuwinello-url-handler.desktop"
 
-    Info "Uninstalling wine-osu:"
+    Info "正在卸载 wine-osu..."
     rm -rf "$XDG_DATA_HOME/osuconfig/wine-osu"
 
-    Info "Uninstalling yawl and the steam runtime:"
+    Info "正在卸载 yawl 和 Steam Runtime..."
     rm -rf "$XDG_DATA_HOME/yawl"
 
-    read -r -p "$(Info "Do you want to uninstall Wineprefix? (y/N)")" wineprch
+    read -r -p "$(Info "是否卸载 Wineprefix？ (y/N): ")" wineprch
 
     if [ "$wineprch" = 'y' ] || [ "$wineprch" = 'Y' ]; then
         rm -rf "$XDG_DATA_HOME/wineprefixes/osu-wineprefix"
     else
-        Info "Skipping.."
+        Info "跳过..."
     fi
 
-    read -r -p "$(Info "Do you want to uninstall osu! game files? (y/N)")" choice
+    read -r -p "$(Info "是否卸载 osu! 游戏文件？ (y/N): ")" choice
 
     if [ "$choice" = 'y' ] || [ "$choice" = 'Y' ]; then
-        read -r -p "$(Info "Are you sure? This will DELETE ALL YOUR GAME FILES! (y/N)")" choice2
+        read -r -p "$(Info "确定吗？这将删除所有游戏文件！ (y/N): ")" choice2
 
         if [ "$choice2" = 'y' ] || [ "$choice2" = 'Y' ]; then
-            Info "Uninstalling game:"
+            Info "正在卸载游戏..."
             if [ -e "$XDG_DATA_HOME/osuconfig/osupath" ]; then
                 OSUUNINSTALLPATH=$(<"$XDG_DATA_HOME/osuconfig/osupath")
                 rm -rf "$OSUUNINSTALLPATH"
@@ -743,29 +859,27 @@ Uninstall() {
             fi
         else
             rm -rf "$XDG_DATA_HOME/osuconfig"
-            Info "Exiting.."
+            Info "退出..."
         fi
     else
         rm -rf "$XDG_DATA_HOME/osuconfig"
     fi
 
-    Info "Uninstallation completed!"
+    Info "卸载完成！"
     return 0
 }
 
 SetupReader() {
     local READER_NAME="${1}"
-    Info "Setting up $READER_NAME wrapper..."
-    # get all the required paths first
+    Info "正在设置 $READER_NAME 包装器..."
     local READER_PATH
     local OSU_WINEDIR
     local OSU_WINEEXE
-    READER_PATH="$(WINEDEBUG=-all "$WINE" winepath -w "$XDG_DATA_HOME/osuconfig/$READER_NAME/$READER_NAME.exe" 2>/dev/null)" || { Error "Didn't find $READER_NAME in the expected location..." && return 1; }
+    READER_PATH="$(WINEDEBUG=-all "$WINE" winepath -w "$XDG_DATA_HOME/osuconfig/$READER_NAME/$READER_NAME.exe" 2>/dev/null)" || { Error "在预期位置未找到 $READER_NAME" && return 1; }
     { [ -r "$XDG_DATA_HOME/osuconfig/.osu-path-winepath" ] && read -r OSU_WINEDIR <<<"$(cat "$XDG_DATA_HOME/osuconfig/.osu-path-winepath")" &&
         [ -r "$XDG_DATA_HOME/osuconfig/.osu-exe-winepath" ] && read -r OSU_WINEEXE <<<"$(cat "$XDG_DATA_HOME/osuconfig/.osu-exe-winepath")"; } ||
-        { Error "You need to fully install osu-winello before trying to set up $READER_NAME.\n\t(Missing $XDG_DATA_HOME/osuconfig/.osu-path-winepath or .osu-exe-winepath .)" && return 1; }
+        { Error "你需要先完全安装 osu-winello 才能设置 $READER_NAME。\n\t（缺少 $XDG_DATA_HOME/osuconfig/.osu-path-winepath 或 .osu-exe-winepath）" && return 1; }
 
-    # launcher batch file to open tosu/gosumemory together with osu in the container, and tries to stop hung gosumemory/tosu process when osu! exits (why does that happen!?)
     cat >"$OSUPATH/launch_with_memory.bat" <<EOF
 @echo off
 set NODE_SKIP_PLATFORM_CHECK=1
@@ -785,14 +899,13 @@ ping -n 5 127.0.0.1 >nul
 goto loop
 EOF
 
-    Info "$READER_NAME wrapper enabled. Launch osu! normally to use it!"
+    Info "$READER_NAME 包装器已启用。正常启动 osu! 即可使用！"
     return 0
 }
 
-# Simple function that downloads Gosumemory!
 Gosumemory() {
     if [ ! -d "$XDG_DATA_HOME/osuconfig/gosumemory" ]; then
-        Info "Downloading gosumemory.."
+        Info "正在下载 gosumemory..."
         mkdir -p "$XDG_DATA_HOME/osuconfig/gosumemory"
         DownloadFile "${GOSUMEMORYLINK}" "/tmp/gosumemory.zip" || return 1
         unzip -d "$XDG_DATA_HOME/osuconfig/gosumemory" -q "/tmp/gosumemory.zip"
@@ -804,7 +917,7 @@ Gosumemory() {
 
 tosu() {
     if [ ! -d "$XDG_DATA_HOME/osuconfig/tosu" ]; then
-        Info "Downloading tosu.."
+        Info "正在下载 tosu..."
         mkdir -p "$XDG_DATA_HOME/osuconfig/tosu"
         DownloadFile "${TOSULINK}" "/tmp/tosu.zip" || return 1
         unzip -d "$XDG_DATA_HOME/osuconfig/tosu" -q "/tmp/tosu.zip"
@@ -814,33 +927,30 @@ tosu() {
     $okay
 }
 
-# Installs Akatsuki patcher (https://akatsuki.gg/patcher)
 akatsukiPatcher() {
     local AKATSUKI_PATH="$XDG_DATA_HOME/osuconfig/akatsukiPatcher"
 
     if ! grep -q 'dotnetdesktop6' "$WINEPREFIX/winetricks.log" 2>/dev/null; then
-        Info "Akatsuki Patcher needs .NET Desktop Runtime 6, installing it with winetricks..."
+        Info "Akatsuki Patcher 需要 .NET Desktop Runtime 6，正在通过 winetricks 安装..."
         $WINETRICKS -q -f dotnetdesktop6
     fi
 
     if [ ! -d "$AKATSUKI_PATH" ]; then
-        Info "Downloading patcher.."
+        Info "正在下载 patcher..."
         mkdir -p "$AKATSUKI_PATH"
         wget --content-disposition -O "$AKATSUKI_PATH/akatsuki_patcher.exe" "$AKATSUKILINK"
     fi
 
-    # Setup usual LaunchOsu settings
     export WINEDEBUG="+timestamp,+pid,+tid,+threadname,+debugstr,+loaddll,+winebrowser,+exec${WINEDEBUG:+,${WINEDEBUG}}"
     WINELLO_LOGS_PATH="${XDG_DATA_HOME}/osuconfig/winello.log"
 
-    Info "Opening $AKATSUKI_PATH/akatsuki_patcher.exe .."
-    Info "If the patcher fails to find osu!, click on Locate > My Computer > D:, then press open and launch!"
-    Info "The run log is located in ${WINELLO_LOGS_PATH}. Attach this file if you make an issue on GitHub or ask for help on Discord."
+    Info "正在打开 $AKATSUKI_PATH/akatsuki_patcher.exe ..."
+    Info "如果 patcher 找不到 osu!，请点击 Locate > My Computer > D:，然后按 open 并启动！"
+    Info "运行日志位于 ${WINELLO_LOGS_PATH}，如遇到问题可附上此文件。"
     "$WINE" "$AKATSUKI_PATH/akatsuki_patcher.exe" &>>"${WINELLO_LOGS_PATH}" || return 1
     return 0
 }
 
-# Installs osu! Mapping Tools (https://github.com/olibomby/mapping_tools)
 mappingTools() {
     local MAPPINGTOOLSPATH="${WINEPREFIX}/drive_c/Program Files/Mapping Tools"
     local OSUPID
@@ -850,18 +960,17 @@ mappingTools() {
     [ ! -d "${WINEPREFIX}/drive_c/dotnet_tmp" ] && mkdir -p "${WINEPREFIX}/drive_c/dotnet_tmp"
     [ ! -d "${WINEPREFIX}/drive_c/Program Files/dotnet" ] && mkdir -p "${WINEPREFIX}/drive_c/Program Files/dotnet"
 
-    # Disable icu.dll to prevent issues
     export WINEDLLOVERRIDES="${WINEDLLOVERRIDES};icu.dll=d"
 
     if [ ! -d "${MAPPINGTOOLSPATH}" ]; then
-        if OSUPID="$(pgrep osu!.exe)"; then Quit "Please close osu! before installing mapping tools for the first time."; fi
+        if OSUPID="$(pgrep osu!.exe)"; then Quit "首次安装 Mapping Tools 前请先关闭 osu!"; fi
 
         "$WINESERVER" -k
 
-        Info "Setting up regedit for Mapping Tools.."
+        Info "正在为 Mapping Tools 设置注册表..."
         waitWine reg add "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f
 
-        Info "Downloading Mapping Tools, please confirm the installer prompts.."
+        Info "正在下载 Mapping Tools，请确认安装程序提示..."
         DownloadFile "${MAPPINGTOOLSLINK}" /tmp/mapping_tools_installer_x64.exe
 
         waitWine /tmp/mapping_tools_installer_x64.exe
@@ -869,22 +978,20 @@ mappingTools() {
     fi
 
     if [ -x "$YAWL_INSTALL_PATH" ] && OSUPID="$(pgrep osu!.exe)"; then
-        Info "Launching Mapping Tools.."
+        Info "正在启动 Mapping Tools..."
         YAWL_VERBS="enter=$OSUPID" "${WINE_INSTALL_PATH}/bin/wine" "$MAPPINGTOOLSPATH/"'Mapping Tools.exe'
     else
-        Quit "Please launch osu! before launching Mapping Tools!"
+        Quit "请先启动 osu! 再启动 Mapping Tools！"
     fi
 }
 
-# Installs rpc-bridge for Discord RPC (https://github.com/EnderIce2/rpc-bridge)
 discordRpc() {
-    Info "Setting up Discord RPC integration..."
+    Info "正在设置 Discord RPC 集成..."
     if [ -f "${WINEPREFIX}/drive_c/windows/bridge.exe" ]; then
-        Info "rpc-bridge (Discord RPC) is already installed, do you want to reinstall it?"
+        Info "rpc-bridge (Discord RPC) 已安装，是否重新安装？"
         askConfirmTimeout "rpc-bridge (Discord RPC)" || return 0
     fi
 
-    # try uninstalling the service first
     waitWine reg delete 'HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\rpc-bridge' /f &>/dev/null
     local chk
 
@@ -900,9 +1007,7 @@ discordRpc() {
 
 folderFixSetup() {
     longPathsFix || return 1
-    # Integrating native file explorer (inspired by) Maot: https://gist.github.com/maotovisk/1bf3a7c9054890f91b9234c3663c03a2
-    # This only involves regedit keys.
-    Info "Setting up native file explorer integration..."
+    Info "正在设置原生文件管理器集成..."
 
     local VBS_PATH="$XDG_DATA_HOME/osuconfig/folderfixosu.vbs"
     local FALLBACK_PATH="$XDG_DATA_HOME/osuconfig/folderfixosu"
@@ -922,7 +1027,6 @@ folderFixSetup() {
         waitWine reg add "HKEY_CLASSES_ROOT\folder\shell\open\command" /f /ve /t REG_SZ /d "${FALLBACK_PATH} xdg-open \"%1\""
     fi
 
-    # Associate .osu and .osb files with winebrowser
     waitWine reg add "HKEY_CLASSES_ROOT\\.osu" /f /ve /t REG_SZ /d "osu_winello_file"
     waitWine reg add "HKEY_CLASSES_ROOT\\.osb" /f /ve /t REG_SZ /d "osu_winello_file"
 
@@ -937,9 +1041,8 @@ folderFixSetup() {
 }
 
 osuHandlerSetup() {
-    Info "Configuring osu-mime and osu-handler..."
+    Info "正在配置 osu-mime 和 osu-handler..."
 
-    # Installing osu-mime from https://aur.archlinux.org/packages/osu-mime
     DownloadFile "${OSUMIMELINK}" "/tmp/osu-mime.tar.gz" || return 1
 
     tar -xf "/tmp/osu-mime.tar.gz" -C "/tmp"
@@ -949,11 +1052,8 @@ osuHandlerSetup() {
     rm -f "/tmp/osu-mime.tar.gz"
     rm -rf "/tmp/osu-mime"
 
-    # Installing osu-handler from https://github.com/openglfreak/osu-handler-wine / https://aur.archlinux.org/packages/osu-handler
-    # Binary was compiled from source on Ubuntu 18.04
     chmod +x "$XDG_DATA_HOME/osuconfig/update/stuff/osu-handler-wine"
 
-    # Creating entries for those two
     echo "[Desktop Entry]
 Type=Application
 Name=osu!
@@ -962,7 +1062,7 @@ Exec=$BINDIR/osu-wine --osuhandler %f
 NoDisplay=true
 StartupNotify=true
 Icon=$XDG_DATA_HOME/icons/osu-wine.png" | tee "$XDG_DATA_HOME/applications/osuwinello-file-extensions-handler.desktop" >/dev/null
-    chmod +x "$XDG_DATA_HOME/applications/osuwinello-file-extensions-handler.desktop" >/dev/null
+    chmod +x "$XDG_DATA_HOME/applications/osuwinello-file-extensions-handler.desktop"
 
     echo "[Desktop Entry]
 Type=Application
@@ -972,18 +1072,15 @@ Exec=$BINDIR/osu-wine --osuhandler %u
 NoDisplay=true
 StartupNotify=true
 Icon=$XDG_DATA_HOME/icons/osu-wine.png" | tee "$XDG_DATA_HOME/applications/osuwinello-url-handler.desktop" >/dev/null
-    chmod +x "$XDG_DATA_HOME/applications/osuwinello-url-handler.desktop" >/dev/null
+    chmod +x "$XDG_DATA_HOME/applications/osuwinello-url-handler.desktop"
     update-desktop-database "$XDG_DATA_HOME/applications"
 
-    # Fix to importing maps/skins/osu links after Stable update 20250122.1: https://osu.ppy.sh/home/changelog/stable40/20250122.1
-    Info "Setting up file (.osz/.osk) and url associations..."
+    Info "正在设置文件 (.osz/.osk) 和 URL 关联..."
 
-    # Adding the osu-handler.reg file to registry
     waitWine regedit /s "$XDG_DATA_HOME/osuconfig/update/stuff/osu-handler.reg"
     $okay
 }
 
-# Open files/links with osu-handler-wine
 osuHandlerHandle() {
     local ARG="${*:-}" OSUPID
     local -a PRE_ARGS
@@ -992,41 +1089,39 @@ osuHandlerHandle() {
 
     if [ -x "$YAWL_INSTALL_PATH" ] && OSUPID="$(pgrep osu!.exe)"; then
         HANDLERRUN=("env" "YAWL_VERBS=enter=$OSUPID" "$YAWL_INSTALL_PATH" "${HANDLERRUN[0]}")
-        echo "Trying to open osu-handler-wine in the running container for osu! (PID=$OSUPID)" >&2
+        echo "尝试在正在运行的 osu! 容器 (PID=$OSUPID) 中打开 osu-handler-wine" >&2
     else
         IFS=" " read -r -a PRE_ARGS <<<"env ${PRE_LAUNCH_ARGS}"
-        HANDLERRUN=("${PRE_ARGS[@]}" "${WINE}") # we don't actually need osu-handler if we're starting a new instance
-        echo "Trying to open a new instance of osu! to handle ${ARG}" >&2
+        HANDLERRUN=("${PRE_ARGS[@]}" "${WINE}")
+        echo "尝试启动新的 osu! 实例来处理 ${ARG}" >&2
     fi
 
     case "$ARG" in
     osu://*)
-        echo "Trying to load link ($ARG).." >&2
+        echo "尝试加载链接 ($ARG)..." >&2
         exec "${HANDLERRUN[@]}" 'C:\\windows\\system32\\start.exe' "$ARG"
         ;;
     *.osr | *.osz | *.osk | *.osz2)
         local EXT="${ARG##*.}" FULLARGPATH FILEDIR
-        FULLARGPATH="$(realpath "${ARG}")" || FULLARGPATH="${ARG}" # || for fallback if realpath failed
+        FULLARGPATH="$(realpath "${ARG}")" || FULLARGPATH="${ARG}"
 
-        # also, add the containing directory to the PRESSURE_VESSEL_FILESYSTEMS_RW, because it might be in some other location
         FILEDIR="$(realpath "$(dirname "${FULLARGPATH}")")"
         if [ -n "${FILEDIR}" ] && [ "${FILEDIR}" != "/" ]; then
             export PRESSURE_VESSEL_FILESYSTEMS_RW="${PRESSURE_VESSEL_FILESYSTEMS_RW}:${FILEDIR}"
         fi
 
-        echo "Trying to load file ($FULLARGPATH).." >&2
+        echo "尝试加载文件 ($FULLARGPATH)..." >&2
         exec "${HANDLERRUN[@]}" 'C:\\windows\\system32\\start.exe' "/ProgIDOpen" "osustable.File.$EXT" "$FULLARGPATH"
         ;;
     esac
-    # If we reached here, it must means osu-handler failed/none of the cases matched
-    Error "Unsupported osu! file ($ARG) !" >&2
-    Error "Try running \"bash $SCRPATH fixosuhandler\" !" >&2
+    Error "不支持的 osu! 文件 ($ARG)！" >&2
+    Error "请尝试运行 \"bash $SCRPATH fixosuhandler\"！" >&2
     return 1
 }
 
 installWinetricks() {
     if [ ! -x "$WINETRICKS" ]; then
-        Info "Installing winetricks..."
+        Info "正在安装 winetricks..."
         DownloadFile "$WINETRICKSLINK" "/tmp/winetricks" || return 1
         mv "/tmp/winetricks" "$XDG_DATA_HOME/osuconfig"
         chmod +x "$WINETRICKS"
@@ -1037,35 +1132,34 @@ installWinetricks() {
 
 FixUmu() {
     if [ ! -f "$BINDIR/osu-wine" ] || [ -z "${LAUNCHERPATH}" ]; then
-        Error "Looks like you haven't installed osu-winello yet, so you should run ./osu-winello.sh first." && return 1
+        Error "你似乎尚未安装 osu-winello，请先运行 ./osu-winello.sh 进行安装。" && return 1
     fi
-    Info "Looks like you're updating from the umu-launcher based osu-wine, so we'll try to run a full update now..."
-    Info "Please answer 'yes' when asked to update the 'osu-wine' launcher"
+    Info "你正在从基于 umu-launcher 的 osu-wine 更新，我们将尝试执行完整更新..."
+    Info "当询问是否更新 'osu-wine' 启动器时，请回答 'yes'"
 
-    Update "${LAUNCHERPATH}" || { Error "Updating failed... Please do a fresh install of osu-winello." && return 1; }
+    Update "${LAUNCHERPATH}" || { Error "更新失败... 请重新安装 osu-winello。" && return 1; }
     $okay
 }
 
 FixYawl() {
     if [ ! -f "$BINDIR/osu-wine" ]; then
-        Error "Looks like you haven't installed osu-winello yet, so you should run ./osu-winello.sh first." && return 1
+        Error "你似乎尚未安装 osu-winello，请先运行 ./osu-winello.sh 进行安装。" && return 1
     elif [ ! -f "$YAWL_INSTALL_PATH" ]; then
-        Error "yawl not found, you should run ./osu-winello.sh first." && return 1
+        Error "未找到 yawl，请先运行 ./osu-winello.sh 进行安装。" && return 1
     fi
 
-    Info "Fixing yawl..."
+    Info "正在修复 yawl..."
     YAWL_VERBS="update;verify;exec=/bin/true" "$YAWL_INSTALL_PATH" && chk=$?
     YAWL_VERBS="make_wrapper=winello;exec=$WINE_INSTALL_PATH/bin/wine;wineserver=$WINE_INSTALL_PATH/bin/wineserver" "$YAWL_INSTALL_PATH"
     if [ "${chk}" != 0 ]; then
-        Error "That didn't seem to work... try again?" && return 1
+        Error "修复似乎没有成功... 请重试？" && return 1
     else
-        Info "yawl should be good to go now."
+        Info "yawl 应该已修复完成。"
     fi
     $okay
 }
 
 WineCachySetup() {
-    # First time setup: yawl-winello-cachy
     if [ ! -d "$XDG_DATA_HOME/osuconfig/wine-osu-cachy-10.0" ]; then
         DownloadFile "$WINECACHYLINK" "/tmp/winecachy.tar.xz"
         tar -xf "/tmp/winecachy.tar.xz" -C "$XDG_DATA_HOME/osuconfig"
@@ -1077,10 +1171,8 @@ WineCachySetup() {
 }
 
 detectAbsoluteTabletHack() {
-    # skip if user already set this explicitly
     [ -n "${WINE_ENABLE_ABS_TABLET_HACK+x}" ] && return 1
 
-    # only enable on wayland / xwayland
     if [ "${XDG_SESSION_TYPE:-}" != "wayland" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
         return 1
     fi
@@ -1088,7 +1180,6 @@ detectAbsoluteTabletHack() {
     [ -r /proc/bus/input/devices ] || return 1
     grep -q 'Name="OpenTabletDriver Virtual Tablet"' /proc/bus/input/devices || return 1
 
-    # check if absolute mode is enabled from otd settings
     local settings_json
     for settings_json in \
         "$HOME/.config/OpenTabletDriver/settings.json" \
@@ -1101,17 +1192,18 @@ detectAbsoluteTabletHack() {
     return 1
 }
 
-# Help!
+# 帮助信息
 Help() {
-    Info "To install the game, run ./osu-winello.sh
-          To uninstall the game, run ./osu-winello.sh uninstall
-          To retry installing yawl-related files, run ./osu-winello.sh fixyawl
-          You can read more at README.md or https://github.com/NelloKudo/osu-winello"
+    Info "使用方法：
+          ./osu-winello.sh                  # 安装游戏
+          ./osu-winello.sh uninstall        # 卸载游戏
+          ./osu-winello.sh fixyawl          # 重新安装 yawl 相关文件
+          更多信息请参阅 README.md 或 https://github.com/NelloKudo/osu-winello"
 }
 
 #   =====================================
 #   =====================================
-#            MAIN SCRIPT
+#            主脚本入口
 #   =====================================
 #   =====================================
 
@@ -1164,13 +1256,11 @@ case "$1" in
     WineCachySetup || exit 1
     ;;
 
-# Also catch "fixosuhandler"
 *osu*handler)
     osuHandlerSetup || exit 1
     ;;
 
 'handle')
-    # Should be called by the osu-handler desktop files (or osu-wine for backwards compatibility)
     osuHandlerHandle "${@:2}" || exit 1
     ;;
 
@@ -1183,10 +1273,9 @@ case "$1" in
     ;;
 
 update*)
-    Update "${2:-}" || exit 1 # second argument is the path to the osu-wine launcher, expected to be called by `osu-wine --update`
+    Update "${2:-}" || exit 1
     ;;
 
-# "umu" kept for backwards compatibility when updating from umu-launcher based osu-wine
 *umu*)
     FixUmu || exit 1
     ;;
@@ -1204,10 +1293,9 @@ update*)
     ;;
 
 *)
-    Info "Unknown argument(s): ${*}"
+    Info "未知参数：${*}"
     Help
     ;;
 esac
 
-# Congrats for reading it all! Have fun playing osu!
-# (and if you wanna improve the script, PRs are always open :3)
+# 祝你玩得愉快！
