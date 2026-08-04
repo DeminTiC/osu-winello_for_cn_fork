@@ -187,17 +187,28 @@ _wget() {
 }
 
 DownloadFile() {
-    local url="$1"
+    local original_url="$1"
     local output="$2"
-    url=$(get_mirror_url "$url")   # 核心修改：应用镜像转换
-    Info "正在下载 $1 到 $2..."
+
+    # 计算经过镜像转换后的实际下载地址
+    local actual_url
+    actual_url="$(get_mirror_url "$original_url")"
+
+    Info "准备下载："
+    Info "  原始 URL: $original_url"
+    Info "  实际 URL: $actual_url"
+    if [ "${USE_CDN:-0}" = "1" ] && [[ "$original_url" == *"github.com"* || "$original_url" == *"raw.githubusercontent.com"* ]]; then
+        Info "注意：已启用镜像 (GITHUB_MIRROR=${GITHUB_MIRROR:-cdnghproxy})，将从镜像下载。"
+    fi
+
+    Info "正在下载 $original_url 到 $output..."
     if [ -n "$wgetcommand" ] && command -v wget >/dev/null 2>&1; then
-        _wget "$url" "$output" && return 0
+        _wget "$actual_url" "$output" && return 0
     fi
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL "$url" -o "$output" && return 0
+        curl -sSL "$actual_url" -o "$output" && return 0
     fi
-    Error "下载 $url 失败，请检查网络连接。"
+    Error "下载 $actual_url 失败，请检查网络连接。"
     return 1
 }
 
