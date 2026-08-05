@@ -751,9 +751,6 @@ auto_install_aria2() {
 installYawl() {
     Info "正在安装 yawl..."
 
-    # 在下载 yawl 前让用户选择镜像（以便加速或使用自定义前缀）
-    select_mirror
-
     DownloadFile "$YAWLLINK" "/tmp/yawl" || return 1
     mv "/tmp/yawl" "$XDG_DATA_HOME/osuconfig"
     chmod +x "$YAWL_INSTALL_PATH"
