@@ -41,6 +41,10 @@ MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v$
 # 本仓库的 Git 地址
 WINELLOGIT="https://ghproxy.mirror.skybyte.me/https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 
+# 全局镜像列表（供 get_mirror_url 使用；可由 select_mirror 修改 USE_CDN/GITHUB_MIRROR）
+mirror_names=("cdnghproxy" "chenc" "xxooo" "skybyte")
+mirror_urls=("https://cdn.gh-proxy.org/" "https://github.chenc.dev/" "https://gh.xxooo.cf/" "https://ghproxy.mirror.skybyte.me/")
+
 # 根据用户选择返回镜像 URL
 # 支持的环境变量：
 #   USE_CDN   : 设为 1 启用镜像加速（默认 0）
@@ -71,6 +75,56 @@ get_mirror_url() {
     local path="${url#https://}"
     path="${path#http://}"
     echo "${mirror_prefix}${path}"
+}
+
+# 新增：将镜像选择抽取为独立函数（供首次安装与后续重配置/修复调用）
+select_mirror() {
+    # 如果已经通过环境变量显式设置，则跳过交互
+    if [ -n "${USE_CDN_OVERRIDE:-}" ]; then
+        return 0
+    fi
+
+    Info "选择下载源（若提供的镜像速度不佳，可自定义）："
+    echo "1) GitHub 直连 (默认)"
+    local total_mirrors=${#mirror_names[@]}
+    for i in "${!mirror_names[@]}"; do
+        index=$((i + 2))
+        echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
+    done
+    local custom_option=$((total_mirrors + 2))
+    echo "$custom_option) 自定义镜像前缀"
+
+    # 交互选择
+    read -r -p "$(Info "请输入选择 [1-$custom_option]: ")" mirror_choice
+
+    case "$mirror_choice" in
+        1|'')
+            export USE_CDN=0
+            Info "使用直连下载"
+            ;;
+        "$custom_option")
+            export USE_CDN=1
+            read -r -p "$(Info "请输入自定义镜像前缀 (例如 https://cdn.gh-proxy.org/): ")" custom_mirror
+            if [[ -n "$custom_mirror" ]]; then
+                export GITHUB_MIRROR="$custom_mirror"
+                Info "已启用自定义镜像: $custom_mirror"
+            else
+                Info "输入为空，取消启用镜像"
+                export USE_CDN=0
+            fi
+            ;;
+        *)
+            if [[ "$mirror_choice" =~ ^[0-9]+$ ]] && [ "$mirror_choice" -ge 2 ] && [ "$mirror_choice" -lt "$custom_option" ]; then
+                idx=$((mirror_choice - 2))
+                export USE_CDN=1
+                export GITHUB_MIRROR="${mirror_names[$idx]}"
+                Info "已启用 CDN 镜像: ${mirror_names[$idx]} (${mirror_urls[$idx]})"
+            else
+                Info "无效选择，使用直连"
+                export USE_CDN=0
+            fi
+            ;;
+    esac
 }
 
 # 脚本所在目录
@@ -258,49 +312,8 @@ InitialSetup() {
 
     Info "欢迎使用本脚本！跟随它安装 osu! :)"
 
-    # 询问下载镜像选择
-    mirror_names=("cdnghproxy" "chenc" "xxooo" "skybyte")
-    mirror_urls=("https://cdn.gh-proxy.org/" "https://github.chenc.dev/" "https://gh.xxooo.cf/" "https://ghproxy.mirror.skybyte.me/")
-    total_mirrors=${#mirror_names[@]}
-
-    Info "选择下载源（若提供的镜像速度不佳，可自定义）："
-    echo "1) GitHub 直连 (默认)"
-    for i in "${!mirror_names[@]}"; do
-        index=$((i + 2))
-        echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
-    done
-    custom_option=$((total_mirrors + 2))
-    echo "$custom_option) 自定义镜像前缀"
-    read -r -p "$(Info "请输入选择 [1-$custom_option]: ")" mirror_choice
-
-    case "$mirror_choice" in
-        1)
-            export USE_CDN=0
-            Info "使用直连下载"
-            ;;
-        "$custom_option")
-            export USE_CDN=1
-            read -r -p "$(Info "请输入自定义镜像前缀 (例如 https://cdn.gh-proxy.org/): ")" custom_mirror
-            if [[ -n "$custom_mirror" ]]; then
-                export GITHUB_MIRROR="$custom_mirror"
-                Info "已启用自定义镜像: $custom_mirror"
-            else
-                Info "输入为空，取消启用镜像"
-                export USE_CDN=0
-            fi
-            ;;
-        *)
-            if [[ "$mirror_choice" =~ ^[0-9]+$ ]] && [ "$mirror_choice" -ge 2 ] && [ "$mirror_choice" -lt "$custom_option" ]; then
-                idx=$((mirror_choice - 2))
-                export USE_CDN=1
-                export GITHUB_MIRROR="${mirror_names[$idx]}"
-                Info "已启用 CDN 镜像: ${mirror_names[$idx]} (${mirror_urls[$idx]})"
-            else
-                Info "无效选择，使用直连"
-                export USE_CDN=0
-            fi
-            ;;
-    esac
+    # 调用独立的镜像选择函数
+    select_mirror
 
     # 检查 $BINDIR 是否在 PATH 中
     mkdir -p "$BINDIR"
@@ -570,6 +583,9 @@ reconfigurePrefix() {
         shift
     done
 
+    # 在重配置前允许用户选择镜像
+    select_mirror
+
     installWinetricks
 
     [ -n "${freshprefix}" ] && {
@@ -594,6 +610,9 @@ reconfigurePrefix() {
 }
 
 redownloadPrefix() {
+    # 在重新下载前允许用户选择镜像
+    select_mirror
+
     Info "正在检查网络连接..."
     ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && { Error "请连接网络后重新运行脚本" && return 1; }
 
@@ -731,6 +750,10 @@ auto_install_aria2() {
 
 installYawl() {
     Info "正在安装 yawl..."
+
+    # 在下载 yawl 前让用户选择镜像（以便加速或使用自定义前缀）
+    select_mirror
+
     DownloadFile "$YAWLLINK" "/tmp/yawl" || return 1
     mv "/tmp/yawl" "$XDG_DATA_HOME/osuconfig"
     chmod +x "$YAWL_INSTALL_PATH"
@@ -786,6 +809,9 @@ Update() {
     [ -r "$XDG_DATA_HOME/osuconfig/wineverupdate" ] && LASTWINEVERSION=$(</"$XDG_DATA_HOME/osuconfig/wineverupdate")
 
     if [ "$LASTWINEVERSION" \!= "$WINEVERSION" ]; then
+        # 在更新前允许用户选择镜像
+        select_mirror
+
         DownloadFile "$WINELINK" "/tmp/wine-osu-winello-fonts-wow64-$MAJOR.$MINOR-$PATCH-x86_64.tar.xz" || return 1
 
         Info "正在更新 Wine-osu..."
@@ -1160,6 +1186,9 @@ FixYawl() {
         Error "未找到 yawl，请先运行 ./osu-winello.sh 进行安装。" && return 1
     fi
 
+    # 在修复 yawl 之前允许用户选择镜像
+    select_mirror
+
     Info "正在修复 yawl..."
     YAWL_VERBS="update;verify;exec=/bin/true" "$YAWL_INSTALL_PATH" && chk=$?
     YAWL_VERBS="make_wrapper=winello;exec=$WINE_INSTALL_PATH/bin/wine;wineserver=$WINE_INSTALL_PATH/bin/wineserver" "$YAWL_INSTALL_PATH"
@@ -1173,6 +1202,9 @@ FixYawl() {
 
 WineCachySetup() {
     if [ ! -d "$XDG_DATA_HOME/osuconfig/wine-osu-cachy-10.0" ]; then
+        # 重新选择镜像以用于下载 cachy 包
+        select_mirror
+
         DownloadFile "$WINECACHYLINK" "/tmp/winecachy.tar.xz"
         tar -xf "/tmp/winecachy.tar.xz" -C "$XDG_DATA_HOME/osuconfig"
         rm -f "/tmp/winecachy.tar.xz"
