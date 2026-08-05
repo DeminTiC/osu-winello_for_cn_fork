@@ -574,7 +574,7 @@ reconfigurePrefix() {
 
     [ -n "${freshprefix}" ] && {
         Info "正在检查网络连接..."
-        ! ping -c 2 1.1.1.1 >/dev/null 2>&1 && { Error "请连接网络后重新运行脚本" && return 1; }
+        ! ping -c 2 114.114.114.114 >/dev/null 2>&1 && { Error "请连接网络后重新运行脚本" && return 1; }
 
         [ -d "${WINEPREFIX:?}" ] && rm -rf "${WINEPREFIX}"
 
