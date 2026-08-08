@@ -79,29 +79,33 @@ get_mirror_url() {
 
 # 新增：将镜像选择抽取为独立函数（供首次安装与后续重配置/修复调用）
 # 新增：测速并返回排序后的镜像索引列表（按延迟升序）
+# 在脚本开头定义全局延迟数组
+declare -a MIRROR_DELAYS
+
+# 测速并返回排序后的镜像索引列表（按延迟升序），同时填充 MIRROR_DELAYS
 ping_mirrors() {
     local -a sorted_indices
-    local -a delays
     local domain avg
+    MIRROR_DELAYS=()  # 清空
 
     for i in "${!mirror_urls[@]}"; do
         # 提取域名（去除协议和路径）
         domain="$(echo "${mirror_urls[$i]}" | awk -F/ '{print $3}')"
         if [ -z "$domain" ]; then
-            delays[$i]=9999
+            MIRROR_DELAYS[$i]=9999
             continue
         fi
         # 执行 ping，提取平均时间（ms）
         avg="$(ping -c 3 -W 2 "$domain" 2>/dev/null | grep 'avg' | awk -F '/' '{print $5}')"
         if [ -z "$avg" ]; then
-            delays[$i]=9999
+            MIRROR_DELAYS[$i]=9999
         else
-            delays[$i]="${avg%.*}"  # 取整数
+            MIRROR_DELAYS[$i]="${avg%.*}"  # 取整数
         fi
     done
 
-    # 按延迟排序（冒泡）
-    sorted_indices=($(for idx in "${!delays[@]}"; do echo "$idx ${delays[$idx]}"; done | sort -n -k2 | awk '{print $1}'))
+    # 按延迟排序（数字排序）
+    sorted_indices=($(for idx in "${!MIRROR_DELAYS[@]}"; do echo "$idx ${MIRROR_DELAYS[$idx]}"; done | sort -n -k2 | awk '{print $1}'))
     echo "${sorted_indices[@]}"
 }
 
@@ -122,10 +126,13 @@ select_mirror() {
     local fastest_idx="${sorted_idx[0]:-}"
     local fastest_name="${mirror_names[$fastest_idx]:-}"
     local fastest_url="${mirror_urls[$fastest_idx]:-}"
+    local fastest_delay="${MIRROR_DELAYS[$fastest_idx]:-}"
 
     Info "正在测试各镜像延迟（ping 3次）..."
-    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
-        Info "最快镜像：$fastest_name (${fastest_url})，延迟约 ${fastest_delay:-?} ms"
+    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ] && [ "$fastest_delay" != "9999" ] && [ -n "$fastest_delay" ]; then
+        Info "最快镜像：$fastest_name (${fastest_url})，延迟约 ${fastest_delay} ms"
+    elif [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
+        Info "最快镜像：$fastest_name (${fastest_url})（延迟未知或不可达）"
     else
         Warning "测速失败，将使用直连或手动选择"
     fi
@@ -147,8 +154,11 @@ select_mirror() {
 
     # 交互选择
     local default_choice=1
-    if [ -n "$fastest_idx" ]; then
+    if [ -n "$fastest_idx" ] && [ "$fastest_delay" != "9999" ] && [ -n "$fastest_delay" ]; then
         default_choice=$((fastest_idx + 2))
+    else
+        # 如果最快镜像不可达，默认还是直连
+        default_choice=1
     fi
     read -r -p "$(Info "请输入选择 [1-$custom_option] (默认 ${default_choice}): ")" mirror_choice
     mirror_choice="${mirror_choice:-$default_choice}"
