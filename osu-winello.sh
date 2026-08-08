@@ -78,6 +78,33 @@ get_mirror_url() {
 }
 
 # 新增：将镜像选择抽取为独立函数（供首次安装与后续重配置/修复调用）
+# 新增：测速并返回排序后的镜像索引列表（按延迟升序）
+ping_mirrors() {
+    local -a sorted_indices
+    local -a delays
+    local domain avg
+
+    for i in "${!mirror_urls[@]}"; do
+        # 提取域名（去除协议和路径）
+        domain="$(echo "${mirror_urls[$i]}" | awk -F/ '{print $3}')"
+        if [ -z "$domain" ]; then
+            delays[$i]=9999
+            continue
+        fi
+        # 执行 ping，提取平均时间（ms）
+        avg="$(ping -c 3 -W 2 "$domain" 2>/dev/null | grep 'avg' | awk -F '/' '{print $5}')"
+        if [ -z "$avg" ]; then
+            delays[$i]=9999
+        else
+            delays[$i]="${avg%.*}"  # 取整数
+        fi
+    done
+
+    # 按延迟排序（冒泡）
+    sorted_indices=($(for idx in "${!delays[@]}"; do echo "$idx ${delays[$idx]}"; done | sort -n -k2 | awk '{print $1}'))
+    echo "${sorted_indices[@]}"
+}
+
 select_mirror() {
     # 如果已经通过环境变量显式设置，则跳过交互
     if [ -n "${USE_CDN_OVERRIDE:-}" ]; then
@@ -89,21 +116,45 @@ select_mirror() {
         return 0
     fi
 
+    # 测速并获取排序后的镜像索引
+    local -a sorted_idx
+    IFS=" " read -r -a sorted_idx <<< "$(ping_mirrors 2>/dev/null)"
+    local fastest_idx="${sorted_idx[0]:-}"
+    local fastest_name="${mirror_names[$fastest_idx]:-}"
+    local fastest_url="${mirror_urls[$fastest_idx]:-}"
+
+    Info "正在测试各镜像延迟（ping 3次）..."
+    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
+        Info "最快镜像：$fastest_name (${fastest_url})，延迟约 ${fastest_delay:-?} ms"
+    else
+        Warning "测速失败，将使用直连或手动选择"
+    fi
+
     Info "选择下载源（若提供的镜像速度不佳，可自定义）："
     echo "1) GitHub 直连 (默认)"
     local total_mirrors=${#mirror_names[@]}
     for i in "${!mirror_names[@]}"; do
         index=$((i + 2))
-        echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
+        # 标记最快镜像
+        if [ "$i" -eq "$fastest_idx" ] && [ -n "$fastest_idx" ]; then
+            echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})  【推荐】"
+        else
+            echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
+        fi
     done
     local custom_option=$((total_mirrors + 2))
     echo "$custom_option) 自定义镜像前缀"
 
     # 交互选择
-    read -r -p "$(Info "请输入选择 [1-$custom_option]: ")" mirror_choice
+    local default_choice=1
+    if [ -n "$fastest_idx" ]; then
+        default_choice=$((fastest_idx + 2))
+    fi
+    read -r -p "$(Info "请输入选择 [1-$custom_option] (默认 ${default_choice}): ")" mirror_choice
+    mirror_choice="${mirror_choice:-$default_choice}"
 
     case "$mirror_choice" in
-        1|'')
+        1)
             export USE_CDN=0
             Info "使用直连下载"
             ;;
