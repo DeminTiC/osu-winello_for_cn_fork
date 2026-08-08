@@ -78,37 +78,30 @@ get_mirror_url() {
 }
 
 # 新增：将镜像选择抽取为独立函数（供首次安装与后续重配置/修复调用）
-# 新增：测速并返回排序后的镜像索引列表（按延迟升序）
-# 在脚本开头定义全局延迟数组
+# 定义全局延迟数组
 declare -a MIRROR_DELAYS
 
 # 测速并返回排序后的镜像索引列表（按延迟升序），同时填充 MIRROR_DELAYS
+# 新增：测速并返回可用镜像索引（延迟升序），如果全部不可达则返回空
 ping_mirrors() {
-    local -a sorted_indices
+    local -a results
     local domain avg
-    MIRROR_DELAYS=()  # 清空
 
     for i in "${!mirror_urls[@]}"; do
-        # 提取域名（去除协议和路径）
         domain="$(echo "${mirror_urls[$i]}" | awk -F/ '{print $3}')"
         if [ -z "$domain" ]; then
-            MIRROR_DELAYS[$i]=9999
+            results+=("$i 9999")
             continue
         fi
-        # 执行 ping，提取平均时间（ms）
-        avg="$(ping -c 3 -W 2 "$domain" 2>/dev/null | grep 'avg' | awk -F '/' '{print $5}')"
-        if [ -z "$avg" ]; then
-            MIRROR_DELAYS[$i]=9999
-        else
-            MIRROR_DELAYS[$i]="${avg%.*}"  # 取整数
-        fi
+        # 兼容性更好的 ping 输出提取
+        avg="$(ping -c 3 -W 2 "$domain" 2>/dev/null | grep -oE 'avg = [0-9.]+' | awk '{print $3}' || echo "9999")"
+        results+=("$i ${avg%.*}")
     done
 
-    # 按延迟排序（数字排序）
-    sorted_indices=($(for idx in "${!MIRROR_DELAYS[@]}"; do echo "$idx ${MIRROR_DELAYS[$idx]}"; done | sort -n -k2 | awk '{print $1}'))
-    echo "${sorted_indices[@]}"
+    printf '%s\n' "${results[@]}" | sort -n -k2 | awk '$2 != 9999 {print $1}'
 }
 
+# 修改后 select_mirror（增加测速并修复默认选择）
 select_mirror() {
     # 如果已经通过环境变量显式设置，则跳过交互
     if [ -n "${USE_CDN_OVERRIDE:-}" ]; then
@@ -120,21 +113,22 @@ select_mirror() {
         return 0
     fi
 
-    # 测速并获取排序后的镜像索引
-    local -a sorted_idx
-    IFS=" " read -r -a sorted_idx <<< "$(ping_mirrors 2>/dev/null)"
-    local fastest_idx="${sorted_idx[0]:-}"
+    # 测速并获取可用镜像索引列表（仅包含可达的）
+    local -a available_idx
+    mapfile -t available_idx < <(ping_mirrors 2>/dev/null)
+    local fastest_idx="${available_idx[0]:-}"
     local fastest_name="${mirror_names[$fastest_idx]:-}"
     local fastest_url="${mirror_urls[$fastest_idx]:-}"
-    local fastest_delay="${MIRROR_DELAYS[$fastest_idx]:-}"
 
     Info "正在测试各镜像延迟（ping 3次）..."
-    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ] && [ "$fastest_delay" != "9999" ] && [ -n "$fastest_delay" ]; then
-        Info "最快镜像：$fastest_name (${fastest_url})，延迟约 ${fastest_delay} ms"
-    elif [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
-        Info "最快镜像：$fastest_name (${fastest_url})（延迟未知或不可达）"
+    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
+        # 重新获取该镜像的实际延迟（可选，仅显示）
+        local domain="${fastest_url%%/*}"
+        domain="${domain#*://}"
+        local delay="$(ping -c 3 -W 2 "$domain" 2>/dev/null | grep -oP 'avg = \K[0-9.]+' || echo "未知")"
+        Info "最快镜像：$fastest_name ($fastest_url)（延迟约 ${delay} ms）"
     else
-        Warning "测速失败，将使用直连或手动选择"
+        Warning "所有镜像均不可达，将使用直连或手动选择"
     fi
 
     Info "选择下载源（若提供的镜像速度不佳，可自定义）："
@@ -142,8 +136,8 @@ select_mirror() {
     local total_mirrors=${#mirror_names[@]}
     for i in "${!mirror_names[@]}"; do
         index=$((i + 2))
-        # 标记最快镜像
-        if [ "$i" -eq "$fastest_idx" ] && [ -n "$fastest_idx" ]; then
+        # 标记最快镜像（仅当测速成功）
+        if [ -n "$fastest_idx" ] && [ "$i" -eq "$fastest_idx" ]; then
             echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})  【推荐】"
         else
             echo "$index) ${mirror_names[$i]} 镜像 (${mirror_urls[$i]})"
@@ -152,13 +146,10 @@ select_mirror() {
     local custom_option=$((total_mirrors + 2))
     echo "$custom_option) 自定义镜像前缀"
 
-    # 交互选择
+    # 设置默认选项：如果测速成功且最快镜像有效，则默认选择它（选项编号 = fastest_idx + 2）
     local default_choice=1
-    if [ -n "$fastest_idx" ] && [ "$fastest_delay" != "9999" ] && [ -n "$fastest_delay" ]; then
+    if [ -n "$fastest_idx" ] && [ -n "$fastest_name" ]; then
         default_choice=$((fastest_idx + 2))
-    else
-        # 如果最快镜像不可达，默认还是直连
-        default_choice=1
     fi
     read -r -p "$(Info "请输入选择 [1-$custom_option] (默认 ${default_choice}): ")" mirror_choice
     mirror_choice="${mirror_choice:-$default_choice}"
