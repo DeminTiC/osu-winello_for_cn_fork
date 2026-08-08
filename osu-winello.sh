@@ -84,6 +84,11 @@ select_mirror() {
         return 0
     fi
 
+    # 如果已启用镜像或已设置镜像前缀，则跳过交互
+    if [ "${USE_CDN:-0}" = "1" ] || [ -n "${GITHUB_MIRROR:-}" ]; then
+        return 0
+    fi
+
     Info "选择下载源（若提供的镜像速度不佳，可自定义）："
     echo "1) GitHub 直连 (默认)"
     local total_mirrors=${#mirror_names[@]}
