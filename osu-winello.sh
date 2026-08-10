@@ -39,7 +39,7 @@ AKATSUKILINK="https://air_conditioning.akatsuki.gg/loader"
 MAPPINGTOOLSLINK="https://github.com/OliBomby/Mapping_Tools/releases/download/v${MAPPINGTOOLSVERSION}/mapping_tools_installer_x64.exe"
 
 # 本仓库的 Git 地址
-WINELLOGIT="https://ghproxy.mirror.skybyte.me/https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
+WINELLOGIT="https://github.com/DeminTiC/osu-winello_for_cn_fork.git"
 
 # 全局镜像列表（供 get_mirror_url 使用；可由 select_mirror 修改 USE_CDN/GITHUB_MIRROR）
 mirror_names=("cdnghproxy" "chenc" "xxooo" "skybyte")
@@ -465,7 +465,7 @@ Categories=Wine;Game;" | tee "$XDG_DATA_HOME/applications/osu-wine.desktop" >/de
     Info "正在安装用于更新的脚本副本..."
     mkdir -p "$XDG_DATA_HOME/osuconfig/update"
 
-    { git clone . "$XDG_DATA_HOME/osuconfig/update" || git clone "${WINELLOGIT}" "$XDG_DATA_HOME/osuconfig/update"; } ||
+    { git clone . "$XDG_DATA_HOME/osuconfig/update" || git clone "$(get_mirror_url "$WINELLOGIT")" "$XDG_DATA_HOME/osuconfig/update"; } ||
         InstallError "Git 克隆失败，请检查网络连接"
 
     git -C "$XDG_DATA_HOME/osuconfig/update" remote set-url origin "${WINELLOGIT}"
